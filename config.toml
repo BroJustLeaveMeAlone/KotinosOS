@@ -1,0 +1,30 @@
+# Disk layout for the OS image.
+#
+# Uses customizations.disk rather than customizations.filesystem: only the
+# disk path supports build-time btrfs subvolume creation. The filesystem
+# path silently limits you to / and /boot on a btrfs root.
+#
+# The ESP, BIOS boot partition and /boot are generated automatically and
+# must not be declared here.
+#
+# Subvolumes use the @ prefix convention (openSUSE/Ubuntu) because snapper
+# and grub-btrfs tooling assumes it.
+
+[[customizations.disk.partitions]]
+type = "btrfs"
+minsize = "20 GiB"
+
+[[customizations.disk.partitions.subvolumes]]
+name = "@"
+mountpoint = "/"
+
+[[customizations.disk.partitions.subvolumes]]
+name = "@home"
+mountpoint = "/home"
+
+# /var is the unproven part of this layout. bootc populates /var from the
+# image on first boot and shares it across deployments; if that collides
+# with var.mount at runtime, drop this block and keep @home.
+[[customizations.disk.partitions.subvolumes]]
+name = "@var"
+mountpoint = "/var"
