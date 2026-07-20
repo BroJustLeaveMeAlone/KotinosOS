@@ -1,4 +1,18 @@
-# Building an Appliance-Grade Linux Distribution
+# A Standalone Appliance Distribution
+
+## Identity & philosophy
+
+A **standalone distribution** with its own identity, defaults, filesystem experience, privilege model, and governance. It *derives from* Fedora's architecture and reuses Fedora code where useful, but it is not a reskin of Fedora. Trajectory chosen: **derive now, diverge over time** — seed the base from `fedora-bootc`, own everything above it from day one, and replace base pieces as the project grows. Every standalone distro starts by deriving; the `FROM` line is a seed, not an identity.
+
+**Governing value: user comfort.** Zero-config, zero resource management. The machine tunes itself; the user manages nothing they shouldn't have to.
+
+**Privilege model:** the ordinary user has almost no privileges and *cannot* break the system. A clean, restricted Settings app covers networks, Bluetooth, display + dark/light, personalization, and basic privacy — nothing that can brick the machine. Full control (rooted terminal, complete control panel) lives behind **offline-2FA admin mode**.
+
+**The AI is the power tool.** A small local model turns plain English into system commands and executes them, available as a sidebar in every application, able to touch every part of the machine. Because the ordinary user is near-powerless, **the AI becomes the primary privilege-escalation surface** — the policy engine constraining it (M6) is therefore the true security boundary, not an add-on.
+
+---
+
+
 
 ## Working mode
 
@@ -23,7 +37,9 @@ Two research findings shaped the architecture:
 
 2. **bootc does *not* provide the described snapshot feature.** It rolls back `/usr` only. `/var` is deliberately shared across deployments and `/home` is untouched — so `rm -rf /*` on a pure bootc system leaves a working OS with the user's data gone. The safety net therefore needs a second, independent layer.
 
-**Constraint: solo developer.** The governing strategy is *assemble, don't author*. Bazzite and Bluefin began as one person layering opinions onto Fedora through a Containerfile. Anywhere this plan can inherit upstream behavior instead of building it, it must.
+**Constraint: solo developer.** At the *base*, the strategy is *inherit, don't reinvent* — derive from Fedora rather than rebuild coreutils/kernel packaging. Divergence and ownership go into the layers above the base (filesystem experience, privilege model, settings, AI, branding, repos), which is where the product actually lives. From-scratch (Yocto/LFS) and immediate source-rebuild were both considered and rejected as non-viable solo.
+
+**The "different filesystem" is a semantic file layer, not a kernel FS.** The disk stays btrfs. Above it, a background indexer builds a full-text index *and* a semantic (embedding) index of file contents, and the shell presents a single location-independent search surface — "find files anywhere, by content, using what the AI understands about them." This is an application/service layer spanning the AI (M6) and shell UX (M3), not a change to on-disk format. Precedents for location-independent search are mature (Spotlight, GNOME Tracker); the semantic half is the local model doing double duty. Constraints to respect: indexing is a CPU/disk cost (index on idle, be selective — it tensions with "zero resource management") and a content index is highly sensitive (must stay encrypted, sandboxed, on-device).
 
 **Development environment:** Windows 10 Pro. Builds run in WSL2; VM testing runs in Hyper-V, because Windows 10 gives WSL2 no nested virtualization and KVM is unavailable.
 
@@ -33,7 +49,8 @@ Two research findings shaped the architecture:
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Base | Fedora (`quay.io/fedora/fedora-bootc`) | Only base with official supported bootc images; newest kernels serve the zero-config hardware goal |
+| Base (seed) | `quay.io/fedora/fedora-bootc:44` | Derivation seed, not identity. Only base with official supported bootc images; newest kernels serve the zero-config hardware goal. Replaced piecewise as the distro diverges. |
+| File experience | Semantic file layer over btrfs | Location-independent + content/embedding search as a single surface; the AI's second job |
 | OS delivery | bootc / OCI image | Atomic updates + bootloader rollback inherited, not built |
 | OS rollback | bootc deployments | Covers `/usr`, `/opt` |
 | Data rollback | Btrfs + snapper | Covers `/home`, `/var` — what bootc won't do |
@@ -204,7 +221,9 @@ Delivers pillar 4 and the project's most defensible idea.
 
 **M5 — God mode and 2FA (pillar 3).** Offline TOTP or FIDO2, no network dependency. **Must resolve the threat-model gap first:** gating a settings *GUI* behind 2FA protects nothing if the user already has a shell. Enforcement has to live at the policy layer — a `polkit` agent or LSM — or it's theater. Decide this before writing UI.
 
-**M6 — AI assistant (pillar 2).** The research problem, and the actual product. Build the **policy engine first** — allowlisted verbs, typed arguments, mandatory dry-run with diff preview, tiered confirmation, full audit log. "Root access but constrained" must become a real capability system; an LLM asked politely to behave is not a security boundary. The sidebar UI comes last. **This is testable on plain Fedora with no image involved, so it can progress in parallel with any earlier milestone** — useful when a build is blocked.
+**M6 — AI assistant (pillar 2).** The research problem, and the actual product. Build the **policy engine first** — allowlisted verbs, typed arguments, mandatory dry-run with diff preview, tiered confirmation, full audit log. "Root access but constrained" must become a real capability system; an LLM asked politely to behave is not a security boundary. Because the ordinary user is near-powerless by design, the AI is the main escalation path — so this engine is *the* security boundary of the whole product. The sidebar UI comes last. **This is testable on plain Fedora with no image involved, so it can progress in parallel with any earlier milestone** — useful when a build is blocked.
+
+**M6b — Semantic file layer (the "different filesystem").** Background indexer building full-text + embedding indexes of file contents; a single location-independent search surface in the shell (M3), content-aware via the local model (M6). Index on idle to honor the zero-resource-management promise; keep the index encrypted and on-device. Shares the model and infrastructure with M6, so it follows naturally from it.
 
 **M7 — Distribution infrastructure.** Installer ISO (`anaconda-iso`), image signing, Secure Boot enrollment, container registry hosting, release channels (stable/beta), update cadence. The step where "my project" becomes "other people's computers."
 
