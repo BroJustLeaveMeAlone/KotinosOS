@@ -1,0 +1,13 @@
+# This project builds a Linux OS image. Anything that runs inside the image
+# or inside a build container must have LF endings, regardless of host OS.
+* text=auto eol=lf
+
+# Explicitly binary
+*.vhd    binary
+*.vhdx   binary
+*.qcow2  binary
+*.raw    binary
+*.iso    binary
+*.vmdk   binary
+*.png    binary
+*.jpg    binary
