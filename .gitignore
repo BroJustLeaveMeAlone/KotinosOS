@@ -1,0 +1,17 @@
+# Build artifacts
+output/
+*.vhd
+*.vhdx
+*.qcow2
+*.raw
+*.iso
+*.vmdk
+
+# Local overrides
+.env
+*.local.toml
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini
