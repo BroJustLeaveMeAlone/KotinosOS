@@ -74,16 +74,55 @@ Nothing else gets built until this is real.
 
 ### Step 1 — Risk spike (do this before anything else)
 
-Research flagged one genuine unknown: bootc-image-builder cannot create Btrfs subvolumes through standard filesystem customizations, and when `rootfs` is btrfs only `/` and `/boot` are configurable. Subvolume support exists only via the newer *disk customizations* path.
+The entire second safety layer depends on Btrfs subvolumes for `/home` and `/var`. Research narrowed the risk considerably — there are **two different customization paths and only one works**:
 
-The entire second safety layer depends on this. Prove it before building on it.
+| Path | Btrfs subvolumes | Notes |
+|---|---|---|
+| `customizations.filesystem` | **No** | With btrfs rootfs, only `/` and `/boot` configurable. This is the "not supported" stated throughout the docs. |
+| `customizations.disk.partitions` | **Yes** | Build-time subvolume creation supported. Use this. |
 
-Attempt, in order:
-1. **Disk customizations** with explicit Btrfs subvolumes for `/home` and `/var`.
-2. **First-boot subvolume creation** — ship a `systemd` unit that creates and mounts the subvolumes on initial boot rather than at build time. Most likely fallback if (1) fails.
-3. **Separate partitions** instead of subvolumes. Works, but loses cheap CoW snapshots — a real downgrade, and worth reconsidering the approach if you land here.
+Working schema shape:
 
-Record which path worked; it constrains milestone 2.
+```toml
+[[customizations.disk.partitions]]
+type = "btrfs"
+minsize = "20 GiB"
+
+[[customizations.disk.partitions.subvolumes]]
+name = "root"
+mountpoint = "/"
+
+[[customizations.disk.partitions.subvolumes]]
+name = "home"
+mountpoint = "/home"
+```
+
+### Validation results (20 Jul 2026)
+
+Schema validated against `bootc-image-builder` using the `manifest` subcommand, which parses config and emits an osbuild manifest without running a build — a fast feedback loop for layout changes.
+
+**Result: accepted, exit 0.** The generated manifest contains:
+
+- An `org.osbuild.btrfs.subvol` stage creating `/@`, `/@home`, `/@var` — **build-time subvolume creation confirmed working.**
+- systemd mount units with correct subvolume options:
+  | Unit | Where | Options |
+  |---|---|---|
+  | `-.mount` | `/` | `subvol=@` |
+  | `home.mount` | `/home` | `subvol=@home` |
+  | `var.mount` | `/var` | `subvol=@var` |
+- A GPT table the builder generated **automatically** — BIOS boot (1 MiB), ESP (200 MiB), `/boot` as xfs (1 GiB), and the btrfs volume (~20 GiB).
+
+**Answered:** the ESP and `/boot` do **not** need explicit declaration. The builder supplies the whole boot chain even when `customizations.disk` takes manual control.
+
+**Still unproven:** manifest generation shows the builder will *attempt* the `/var` subvolume; it does not prove bootc's first-boot `/var` population coexists with `var.mount` at runtime. That only surfaces at actual boot (step 5). Odds are now much better, but treat it as open.
+
+Fallbacks if `/var` fails at boot:
+1. **Drop `/var` to a plain directory on the root subvolume**, keeping `@home`. `/home` alone still covers the primary data-loss case.
+2. **First-boot subvolume creation** — a `systemd` unit creating and mounting subvolumes on initial boot instead of at build time.
+
+### Repo-local gotcha
+
+`/tmp` in this WSL distro is **tmpfs and gets cleared without a reboot** — a spike artifact vanished mid-session. Keep build artifacts and scratch configs under a persistent path, not `/tmp`.
 
 ### Step 2 — Repo skeleton
 
@@ -97,11 +136,36 @@ Justfile               # task runner
 
 ### Step 3 — Minimal image
 
-`Containerfile` starting from `quay.io/fedora/fedora-bootc` — **pin an explicit tag**, don't use `:latest`; verify the current release at build time. Add a single marker file so you can prove which version booted. Nothing else yet.
+`Containerfile` starting from **`quay.io/fedora/fedora-bootc:44`**. Add a single marker file so you can prove which version booted. Nothing else yet.
+
+**Tag pinning (verified by manifest digest, 20 Jul 2026):**
+
+| Tag | Resolves to |
+|---|---|
+| `45`, `rawhide` | **Same digest — 45 is the development branch, not a release** |
+| `latest`, `44` | Same digest — Fedora 44 is current stable |
+| `43` | Previous stable |
+
+Pin `44` explicitly. Never use `:latest` (it moves under you at release boundaries) and never assume the highest number is stable — here it silently lands you on rawhide. Re-verify digests when bumping releases.
 
 ### Step 4 — Disk image
 
-Run `bootc-image-builder` (`quay.io/centos-bootc/bootc-image-builder`) with `--rootfs btrfs` and the layout from step 1. Output **`vhd`** for Hyper-V. Avoid `anaconda-iso` for now — ISO builds pull RPMs and won't work offline.
+Run the image builder with `--rootfs btrfs` and the layout from step 1. Output **`vhd`** for Hyper-V. Avoid `anaconda-iso` for now — ISO builds pull RPMs and won't work offline.
+
+> **Tooling note:** `osbuild/bootc-image-builder` was **archived 18 June 2026** and merged into [`osbuild/image-builder`](https://github.com/osbuild/image-builder). The `quay.io/centos-bootc/bootc-image-builder:latest` container still works during transition, but track the new repo for the successor image and any schema changes.
+
+Invocation requires a privileged container and the host container store:
+
+```bash
+sudo podman run --rm -it --privileged --pull=newer \
+  --security-opt label=type:unconfined_t \
+  -v ./config.toml:/config.toml:ro \
+  -v ./output:/output \
+  -v /var/lib/containers/storage:/var/lib/containers/storage \
+  quay.io/centos-bootc/bootc-image-builder:latest \
+  --type vhd --rootfs btrfs \
+  <your-image-ref>
+```
 
 ### Step 5 — Boot
 
