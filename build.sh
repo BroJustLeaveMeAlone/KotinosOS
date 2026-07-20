@@ -42,9 +42,22 @@ podman tag "${IMAGE}" localhost/distro:latest
 
 echo "==> Building ${TYPE} disk image"
 mkdir -p "${OUTPUT_DIR}"
+
+# Merge the committed disk layout with the gitignored credentials overlay,
+# if present. TOML arrays-of-tables concatenate cleanly, so no key conflicts.
+# Release builds must run without config.dev.toml present.
+BUILD_CONFIG="$(mktemp /tmp/distro-config.XXXXXX.toml)"
+trap 'rm -f "${BUILD_CONFIG}"' EXIT
+cat "${REPO_ROOT}/config.toml" > "${BUILD_CONFIG}"
+if [[ -f "${REPO_ROOT}/config.dev.toml" ]]; then
+    echo "    including config.dev.toml (test credentials -- not for release)"
+    printf '\n' >> "${BUILD_CONFIG}"
+    cat "${REPO_ROOT}/config.dev.toml" >> "${BUILD_CONFIG}"
+fi
+
 podman run --rm --privileged \
     --security-opt label=type:unconfined_t \
-    -v "${REPO_ROOT}/config.toml:/config.toml:ro" \
+    -v "${BUILD_CONFIG}:/config.toml:ro" \
     -v "${OUTPUT_DIR}:/output" \
     -v /var/lib/containers/storage:/var/lib/containers/storage \
     "${BUILDER}" \

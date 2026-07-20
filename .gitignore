@@ -11,6 +11,10 @@ output/
 .env
 *.local.toml
 
+# Development credentials overlay -- contains a password hash and SSH key
+# baked into test images. Must never be committed.
+config.dev.toml
+
 # OS cruft
 .DS_Store
 Thumbs.db
