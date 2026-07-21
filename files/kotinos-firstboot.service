@@ -1,0 +1,25 @@
+[Unit]
+Description=KotinosOS first-boot provisioning
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+# /var is a separate btrfs subvolume and is what we provision into, so it must
+# be mounted first -- otherwise the account would be written to the directory
+# the real /var is about to cover.
+RequiresMountsFor=/var
+After=local-fs.target
+
+# The account and its authorized_keys must exist before anything can log in.
+Before=systemd-user-sessions.service sshd.service display-manager.service
+
+# Cheap short-circuit on every subsequent boot; the script re-checks too.
+ConditionPathExists=!/var/lib/kotinos/.provisioned
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/kotinos-firstboot
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -19,7 +19,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | | Milestone | Status |
 |---|---|---|
 | **M1** | Foundation — bootable image, subvolumes, rollback proven | ✅ **Complete** (21 Jul 2026) |
-| **M1.5** | First-boot provisioning — create accounts in the live `/var` | ⬜ Not started |
+| **M1.5** | First-boot provisioning — create accounts in the live `/var` | ✅ **Complete** (21 Jul 2026) |
 | **M2** | Safety net — snapper, escalation hook, recovery environment | ⬜ Not started |
 | M3 | Desktop & appliance UX | ⬜ Not started |
 | M4 | Sandboxing & hardening | ⬜ Not started |
@@ -86,7 +86,7 @@ surviving every transition.
 
 ---
 
-## Milestone 1.5 — First-boot provisioning ⬜ NOT STARTED
+## Milestone 1.5 — First-boot provisioning ✅ COMPLETE
 
 **In plain words:** make the machine create your user account the first time it
 boots.
@@ -108,15 +108,33 @@ is on `@var`, created at first boot, that survives an upgrade and a rollback.
 
 ### Steps
 
-- [ ] Choose the provisioning mechanism (systemd oneshot vs. cloud-init vs. `systemd-firstboot`) and record why
-- [ ] Ship the provisioning unit + script in the image under `/usr` (image-managed, so it can't be shadowed)
-- [ ] Create the account at first boot: user, `wheel` membership, home under `/var/home`, shell
-- [ ] Install SSH keys into the real runtime home, replacing the `/usr` debug-key workaround as the *primary* path (keep the debug path for recovery)
-- [ ] Make it idempotent — stamp file in `/var` so it runs exactly once, and never clobbers an existing home
-- [ ] Get SELinux contexts right on the created home and `.ssh` (wrong labels break key auth even when the file is correct)
-- [ ] Verify on a clean VM: account exists, `/var/home/<user>` populated, key login works
-- [ ] Verify it persists across `bootc upgrade` and `bootc rollback`
-- [ ] Decide how the real product asks for the username/password (hand off to M3's first-run experience)
+- [x] **Mechanism chosen: systemd oneshot unit.** Preferred over cloud-init (heavy, cloud-oriented) and `systemd-firstboot` (handles locale/hostname, not real user accounts). Gated by a stamp file in `/var` rather than `ConditionFirstBoot`, because the stamp lives on the same volume as the thing it guards — if `/var` is ever reset, provisioning correctly runs again
+- [x] Provisioning unit + script shipped under `/usr` (`files/kotinos-firstboot.{sh,service}`), image-managed so it cannot be shadowed
+- [x] Account created at first boot: user, `wheel`, home at `/var/home/<user>`, shell
+- [x] SSH keys installed into the real runtime home as the primary path; `/usr` debug path kept as recovery
+- [x] Idempotent — `RequiresMountsFor=/var`, stamp at `/var/lib/kotinos/.provisioned`, never clobbers an existing home
+- [x] SELinux contexts correct — `restorecon` yields `ssh_home_t` on `.ssh` and `authorized_keys`
+- [x] Verified on a clean VM: account exists, home populated, key login works
+- [x] Verified across `bootc upgrade` **and** `bootc rollback`
+- [ ] *(deferred to M3)* How the real product asks for username/password — belongs with the first-run experience
+
+### Result
+
+| Stage | `BUILD_ID` | Account | User data | Provisioning re-ran? |
+|---|---|---|---|---|
+| first boot | v3 | created (uid 1001, `wheel`) | — | ran once |
+| after reboot | v3 | intact | intact | no (`ConditionResult=no`) |
+| after `bootc upgrade` | v4 | intact | intact | no |
+| after `bootc rollback` | v3 | intact | intact | no |
+
+Login as the provisioned user via SSH key confirmed working after rollback.
+
+**Design notes.** The password is *locked*, not empty — an empty password would
+permit passwordless console login; locked denies password auth entirely until
+M3 collects a real one. The dev key is installed in two places on purpose: the
+normal path (copied into the user's home at first boot) and a recovery path read
+straight from `/usr` by sshd, so a bug in provisioning is debuggable instead of
+locking us out of the machine — which happened twice during M1.
 
 ---
 
