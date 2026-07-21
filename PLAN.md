@@ -1,4 +1,7 @@
-# A Standalone Appliance Distribution
+# KotinosOS — Project Plan
+
+*A standalone, comfort-first Linux distribution with a native AI and an unbreakable safety net.*
+*Named for the* kotinos*, the olive wreath awarded to victors at the ancient Olympic Games — a symbol of excellence, wisdom, and peace rather than wealth.*
 
 ## Identity & philosophy
 
@@ -21,7 +24,7 @@ Division of labor:
 - **Claude sets up** environment, toolchain, and infrastructure — WSL, podman, Hyper-V, CI wiring.
 - **You author the project code** — `Containerfile`, disk config, build scripts — with review and technical input.
 
-**Repository:** https://github.com/BroJustLeaveMeAlone/Distro
+**Repository:** https://github.com/BroJustLeaveMeAlone/KotinosOS
 
 ---
 

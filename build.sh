@@ -8,7 +8,7 @@
 #   ./build.sh [BUILD_ID] [TYPE]
 #
 # BUILD_ID defaults to a UTC timestamp and is baked into
-# /usr/lib/distro-release so a booted system can identify itself.
+# /usr/lib/kotinos-release so a booted system can identify itself.
 # TYPE defaults to vhd for Hyper-V.
 
 set -euo pipefail
@@ -16,7 +16,7 @@ set -euo pipefail
 BUILD_ID="${1:-$(date -u +%Y%m%d.%H%M%S)}"
 TYPE="${2:-vhd}"
 
-IMAGE="localhost/distro:${BUILD_ID}"
+IMAGE="localhost/kotinos:${BUILD_ID}"
 BUILDER="quay.io/centos-bootc/bootc-image-builder:latest"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -38,7 +38,7 @@ podman build \
     "${REPO_ROOT}"
 
 # Tag as :latest too, so bootc upgrade has a stable ref to follow.
-podman tag "${IMAGE}" localhost/distro:latest
+podman tag "${IMAGE}" localhost/kotinos:latest
 
 echo "==> Building ${TYPE} disk image"
 mkdir -p "${OUTPUT_DIR}"
@@ -46,7 +46,7 @@ mkdir -p "${OUTPUT_DIR}"
 # Merge the committed disk layout with the gitignored credentials overlay,
 # if present. TOML arrays-of-tables concatenate cleanly, so no key conflicts.
 # Release builds must run without config.dev.toml present.
-BUILD_CONFIG="$(mktemp /tmp/distro-config.XXXXXX.toml)"
+BUILD_CONFIG="$(mktemp /tmp/kotinos-config.XXXXXX.toml)"
 trap 'rm -f "${BUILD_CONFIG}"' EXIT
 cat "${REPO_ROOT}/config.toml" > "${BUILD_CONFIG}"
 if [[ -f "${REPO_ROOT}/config.dev.toml" ]]; then

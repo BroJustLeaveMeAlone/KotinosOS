@@ -10,8 +10,8 @@ FROM quay.io/fedora/fedora-bootc:44
 # file at each step to confirm which deployment is active.
 ARG BUILD_ID=dev
 
-RUN printf 'NAME="Distro"\nBUILD_ID="%s"\nBASE="fedora-bootc:44"\n' "${BUILD_ID}" \
-      > /usr/lib/distro-release
+RUN printf 'NAME="KotinosOS"\nID=kotinos\nBUILD_ID="%s"\nBASE="fedora-bootc:44"\n' "${BUILD_ID}" \
+      > /usr/lib/kotinos-release
 
 # Fails the build if the result is not a valid bootc image.
 RUN bootc container lint
