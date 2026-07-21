@@ -138,11 +138,30 @@ locking us out of the machine — which happened twice during M1.
 
 ---
 
-## Milestone 2 — Safety net ⬜ NOT STARTED
+## Milestone 2 — Safety net 🚧 IN PROGRESS
 
-Steps get written here when we begin. Carried forward from M1:
+**In plain words:** the OS can already undo a bad *update*. This milestone lets
+it undo a bad *day* — accidental deletion, a botched config, a destructive
+command. You notice it exactly once: when something goes wrong and the machine
+offers to put it back.
 
-- snapper must target **`@var`**, not `/home`
-- Escalation hook: pin the bootc deployment *and* snapshot `@var` before granting admin mode
-- Recovery environment reachable from the bootloader
-- Adversarial test: run `rm -rf /*` and document exactly what survives
+**Exit criteria:** scheduled snapshots of user data exist with a bounded disk
+budget; a snapshot is taken automatically before admin escalation; a broken
+system can be recovered from the bootloader; and `rm -rf /*` has been run with
+the survival story written down.
+
+**The hard part** is restoring, not snapshotting. bootc owns `/`, so rolling
+back user data on `@var` is a *different* mechanism from OS rollback — and it
+has to work when the machine is too broken to boot normally.
+
+### Steps
+
+- [ ] Install `snapper` in the image; decide config placement (`/etc` is 3-way merged, so shipped configs survive upgrades)
+- [ ] Register a snapper config against **`@var`** at first boot — `.snapshots` cannot be created at build time, same `/var` reason as M1.5
+- [ ] Set retention + disk budget (timeline counts, `SPACE_LIMIT`, `FREE_LIMIT`) so snapshots can never fill the disk
+- [ ] Enable timeline + cleanup timers; verify snapshots actually appear on schedule
+- [ ] **Escalation hook:** one command that pins the current bootc deployment *and* snapshots `@var`, to be wired to M5's 2FA gate
+- [ ] Decide and implement the `/var` restore mechanism (file-level restore vs. subvolume swap) — the genuinely open design question
+- [ ] Recovery environment reachable from the bootloader when normal boot fails
+- [ ] Verify recovery against a deliberately corrupted system
+- [ ] **Adversarial test:** run `rm -rf /*` in a VM and document exactly what survives and what is lost
