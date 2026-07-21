@@ -40,7 +40,8 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 - [x] **BOM guard in `Containerfile`** — a UTF-8 BOM before a shebang stops the kernel finding the interpreter, and the script still works under `bash script.sh`, so the breakage hides. Editing on Windows introduces BOMs easily; the build now fails on one
 - [ ] **Choose a license** — until one exists, nobody may legally use or contribute
 - [x] **Directories renamed to say what they hold.** `files/` → `system-scripts/` + `systemd-units/`, `assets/` → `branding/`, `output/` → `build-output/`, `config.toml` → `disk-layout.toml`, `config.dev.toml` → `dev-credentials.toml`. Same rule for anything added later: no `src/`, `lib/`, `utils/`
-- [ ] Logo: transparent-background PNG + SVG (current asset is white-background, shows a white box on dark themes)
+- [x] **Logo: transparent-background PNG** (`branding/kotinos-logo-transparent.png`) — white background removed with a luminance ramp so leaf edges stay smooth, then cropped to the artwork. No more white box on dark themes
+- [ ] Logo: **SVG version** — needed for the boot splash, favicon, and installer, where the mark must scale to any size. The PNG cannot do that job
 
 ---
 

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./branding/kotinos-logo.png" alt="KotinosOS logo — an olive wreath" width="160">
+  <img src="./branding/kotinos-logo-transparent.png" alt="KotinosOS logo — an olive wreath" width="160">
 </p>
 
 <h1 align="center">KotinosOS</h1>
