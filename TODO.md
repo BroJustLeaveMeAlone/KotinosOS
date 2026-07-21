@@ -162,6 +162,38 @@ has to work when the machine is too broken to boot normally.
 - [x] Enable timeline + cleanup timers
 - [x] **Escalation hook** (`/usr/libexec/kotinos-escalate`): pins the current ostree deployment *and* snapshots `@var`. Fails closed — non-zero exit means the M5 gate must refuse escalation
 - [x] **Restore mechanism decided: file-level via `snapper undochange`.** Subvolume swap was rejected — `/var` holds live system state (logs, container storage, the running `.snapshots` tree), so swapping it wholesale under a running system is far more disruptive than reverting file changes. Verified: destroyed a user's `Documents` and restored it with ownership and contents intact
+- [x] **Adversarial test:** `rm -rf --no-preserve-root /*` run on a live system (results below)
 - [ ] Recovery environment reachable from the bootloader when normal boot fails
-- [ ] Verify recovery against a deliberately corrupted system
-- [ ] **Adversarial test:** run `rm -rf /*` in a VM and document exactly what survives and what is lost
+- [ ] Guarantee a spare deployment always exists (a fresh install has only one, so there is nothing to roll back to)
+- [ ] Verify recovery against the deliberately destroyed system
+
+### Adversarial test result — `rm -rf /*`
+
+| Path | Outcome | Why |
+|---|---|---|
+| `/usr` | **survived intact** | read-only, image-managed by bootc |
+| `/var/.snapshots` | **survived** | `rm` failed with *"Read-only file system"* — btrfs read-only snapshots resist deletion |
+| `/var/home` | destroyed | writable user data |
+| `/etc` | destroyed | writable, per-deployment |
+
+**After reboot: the machine did not come back.** Heartbeat reported *No Contact*
+and SSH never returned. The kernel loads, but userspace cannot start without
+`/etc`.
+
+**The honest recovery story today:** *your data survives, the running system
+does not.* The snapshots holding every file are intact on disk — but nothing
+currently running can reach them, because the OS that would perform the restore
+is the thing that got destroyed.
+
+**What this proves the recovery environment must do**, and it is now specified by
+evidence rather than guesswork:
+
+1. Boot **without depending on `/etc` or `/var`**, since both can be gone.
+2. Run from `/usr`, which is the one thing that reliably survives.
+3. Restore `/var` from a surviving snapshot.
+4. Restore `/etc` — which is per-deployment, so it needs a redeploy or a second deployment.
+
+**Related finding:** a freshly installed system has exactly **one** deployment, so
+`bootc rollback` has no target. Rollback is not a recovery path on day one. The
+install must leave a spare deployment pinned, or the bootloader must offer a
+rescue entry that does not depend on one.
