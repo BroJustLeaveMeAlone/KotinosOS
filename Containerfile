@@ -47,15 +47,35 @@ RUN chmod 0755 /usr/libexec/kotinos-firstboot && \
 # snapper snapshots /var, which is where all user data lives. This is the layer
 # bootc deliberately does not cover: bootc rollback restores the OS and leaves
 # /var untouched, so without this a destructive command is unrecoverable.
-RUN dnf install -y snapper && dnf clean all
+# rsync is what the recovery script uses to restore files; greenboot detects an
+# unhealthy boot and drives automatic rollback at the bootloader.
+RUN dnf install -y snapper rsync greenboot greenboot-default-health-checks && \
+    dnf clean all
 
 COPY files/kotinos-snapshots.sh /usr/libexec/kotinos-snapshots
 COPY files/kotinos-snapshots.service /usr/lib/systemd/system/kotinos-snapshots.service
 COPY files/kotinos-escalate.sh /usr/libexec/kotinos-escalate
+COPY files/kotinos-recover.sh /usr/libexec/kotinos-recover
+COPY files/kotinos-health-check.sh /usr/lib/greenboot/check/required.d/50-kotinos-health.sh
 
-RUN chmod 0755 /usr/libexec/kotinos-snapshots /usr/libexec/kotinos-escalate && \
+RUN chmod 0755 /usr/libexec/kotinos-snapshots \
+                /usr/libexec/kotinos-escalate \
+                /usr/libexec/kotinos-recover \
+                /usr/lib/greenboot/check/required.d/50-kotinos-health.sh && \
+    ln -sf /usr/libexec/kotinos-recover /usr/bin/kotinos-recover && \
     systemctl enable kotinos-snapshots.service && \
-    systemctl enable snapper-timeline.timer snapper-cleanup.timer
+    systemctl enable snapper-timeline.timer snapper-cleanup.timer && \
+    systemctl enable greenboot-healthcheck.service
+
+# Enablement must not be silenced. An earlier version of this file enabled a
+# guessed list of greenboot units with `2>/dev/null || true`; the names were
+# wrong for this greenboot release, the errors were swallowed, and the image
+# shipped with health checking silently disabled. greenboot-healthcheck.service
+# carries Also=greenboot-success.target greenboot-set-rollback-trigger.service,
+# so enabling it pulls in the rest.
+RUN systemctl is-enabled greenboot-healthcheck.service && \
+    systemctl is-enabled kotinos-snapshots.service && \
+    systemctl is-enabled kotinos-firstboot.service
 
 # Optional development access. Empty in release builds.
 #

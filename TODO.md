@@ -38,6 +38,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 - [x] README written (vision, architecture, build steps, roadmap)
 - [x] LF line endings enforced (`.gitattributes`) — CRLF would break shebangs and unit files inside the image
 - [ ] **Choose a license** — until one exists, nobody may legally use or contribute
+- [ ] **Rename directories to say what they hold.** `files/` is meaningless — everything is files. Same rule for anything added later: no `src/`, `lib/`, `utils/`
 - [ ] Logo: transparent-background PNG + SVG (current asset is white-background, shows a white box on dark themes)
 
 ---
@@ -163,9 +164,42 @@ has to work when the machine is too broken to boot normally.
 - [x] **Escalation hook** (`/usr/libexec/kotinos-escalate`): pins the current ostree deployment *and* snapshots `@var`. Fails closed — non-zero exit means the M5 gate must refuse escalation
 - [x] **Restore mechanism decided: file-level via `snapper undochange`.** Subvolume swap was rejected — `/var` holds live system state (logs, container storage, the running `.snapshots` tree), so swapping it wholesale under a running system is far more disruptive than reverting file changes. Verified: destroyed a user's `Documents` and restored it with ownership and contents intact
 - [x] **Adversarial test:** `rm -rf --no-preserve-root /*` run on a live system (results below)
-- [ ] Recovery environment reachable from the bootloader when normal boot fails
-- [ ] Guarantee a spare deployment always exists (a fresh install has only one, so there is nothing to roll back to)
-- [ ] Verify recovery against the deliberately destroyed system
+- [x] **Recovery is automatic, via greenboot** — health checks run at boot; a failing boot triggers `bootc` rollback and a reboot with no human involved. Stronger than the original spec, which only asked the bootloader to *offer* recovery
+- [x] **Health check written against the real failure mode** (`/usr/lib/greenboot/check/required.d/50-kotinos-health.sh`)
+- [x] `kotinos-recover` restores user data from a snapshot without depending on `/etc`
+- [x] Verify recovery against a deliberately broken system
+- [ ] Guarantee a spare deployment always exists — a fresh install has only one, so greenboot has nothing to roll back to on day one. **Still open**; belongs with the installer (M7)
+
+### Recovery verification
+
+Full cycle observed on a live VM:
+
+| Step | Result |
+|---|---|
+| Healthy system, upgrade v7 → v8 | applied and stuck |
+| Broken system (user home destroyed), boot v8 | health check failed |
+| greenboot response | `Deployment manager 'bootc' detected, attempting rollback` → `Rollback successful` → automatic reboot |
+| Landed on | previous working deployment, **unattended** |
+| `kotinos-recover` | restored the home from the baseline snapshot, ownership and SELinux labels intact |
+| Re-upgrade after restore | applied and stuck; all 8 checks pass |
+
+### Two bugs found and fixed here
+
+**1. `|| true` shipped a disabled safety feature.** The `systemctl enable` line used
+guessed greenboot unit names that don't exist in 0.16.3, with errors silenced.
+The build passed and the image shipped with health checking off. Fixed with the
+right unit (`greenboot-healthcheck.service`, whose `Also=` pulls in the rest)
+plus an explicit `systemctl is-enabled` assertion that **fails the build** if any
+safety unit is not enabled.
+
+**2. The health check was too weak to detect the disaster it existed for.** It
+tested `test -d /var/home`, but `systemd-tmpfiles` recreates that directory empty
+on every boot — so a machine that had lost every user file reported *healthy*.
+It now verifies the provisioned account's home exists **and is non-empty**.
+
+Both are the same failure: *a safety feature reporting success while doing
+nothing*. Same species as M1's silent rollback. This is why the destructive tests
+matter more than reading the code.
 
 ### Adversarial test result — `rm -rf /*`
 
