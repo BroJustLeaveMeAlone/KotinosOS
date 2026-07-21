@@ -13,5 +13,21 @@ ARG BUILD_ID=dev
 RUN printf 'NAME="KotinosOS"\nID=kotinos\nBUILD_ID="%s"\nBASE="fedora-bootc:44"\n' "${BUILD_ID}" \
       > /usr/lib/kotinos-release
 
+# Optional development access. Empty in release builds.
+#
+# Fedora bootc places every account's home under /var (/root -> /var/roothome,
+# /home -> /var/home). When /var is a separate subvolume, image-seeded keys are
+# shadowed and no account can log in. This puts the key under /usr instead --
+# image-managed, so it survives regardless of how /var is mounted.
+ARG DEV_SSH_KEY=""
+RUN if [ -n "${DEV_SSH_KEY}" ]; then \
+      install -d -m 0755 /usr/share/kotinos/ssh && \
+      printf '%s\n' "${DEV_SSH_KEY}" > /usr/share/kotinos/ssh/root && \
+      chmod 0644 /usr/share/kotinos/ssh/root && \
+      install -d -m 0755 /etc/ssh/sshd_config.d && \
+      printf 'AuthorizedKeysFile /usr/share/kotinos/ssh/%%u\nPermitRootLogin prohibit-password\n' \
+        > /etc/ssh/sshd_config.d/10-kotinos-dev.conf ; \
+    fi
+
 # Fails the build if the result is not a valid bootc image.
 RUN bootc container lint

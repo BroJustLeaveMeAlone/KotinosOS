@@ -30,9 +30,17 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# Development SSH key, if the credentials overlay is present. Release builds
+# have no config.dev.toml and so bake in no key.
+DEV_SSH_KEY=""
+if [[ -f "${REPO_ROOT}/config.dev.toml" ]]; then
+    DEV_SSH_KEY="$(grep -o 'ssh-[a-z0-9-]* [A-Za-z0-9+/=]* *[^"]*' "${REPO_ROOT}/config.dev.toml" | head -1)"
+fi
+
 echo "==> Building ${IMAGE}"
 podman build \
     --build-arg "BUILD_ID=${BUILD_ID}" \
+    --build-arg "DEV_SSH_KEY=${DEV_SSH_KEY}" \
     --tag "${IMAGE}" \
     --file "${REPO_ROOT}/Containerfile" \
     "${REPO_ROOT}"

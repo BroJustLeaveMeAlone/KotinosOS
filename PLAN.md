@@ -134,11 +134,27 @@ Schema validated against `bootc-image-builder` using the `manifest` subcommand, 
 
 **Answered:** the ESP and `/boot` do **not** need explicit declaration. The builder supplies the whole boot chain even when `customizations.disk` takes manual control.
 
-**Still unproven:** manifest generation shows the builder will *attempt* the `/var` subvolume; it does not prove bootc's first-boot `/var` population coexists with `var.mount` at runtime. That only surfaces at actual boot (step 5). Odds are now much better, but treat it as open.
+### Runtime results (21 Jul 2026) — booted and verified
 
-Fallbacks if `/var` fails at boot:
-1. **Drop `/var` to a plain directory on the root subvolume**, keeping `@home`. `/home` alone still covers the primary data-loss case.
-2. **First-boot subvolume creation** — a `systemd` unit creating and mounting subvolumes on initial boot instead of at build time.
+The image boots in Hyper-V and was inspected over SSH. Runtime layout:
+
+| Subvolume | ID | Mounted at | Verdict |
+|---|---|---|---|
+| `@` | 256 | `/sysroot`, and `/` via composefs overlay (read-only) | works |
+| `@var` | 258 | `/var` | works — the snapshottable data volume |
+| `@home` | 257 | **nothing** | created but never mounted — **removed from config** |
+
+**Two findings that reshape the safety-net design:**
+
+**1. There is no `/home`.** Fedora bootc ships `/home` as a symlink to `/var/home`, and `/root` as a symlink to `/var/roothome`. A subvolume mounted at `/home` is inert. *All* user data — including root's — lives under `/var`. So the data safety net consolidates onto `@var`; `@home` was dead weight.
+
+**2. A separate `/var` subvolume does not inherit the image's `/var`.** The image's seeded var stays at `/sysroot/ostree/deploy/default/var` while the live `/var` is the `@var` subvolume, which `systemd-tmpfiles` fills with a bare skeleton. Verified: `/var/roothome/.ssh` exists but is empty, `/var/home` is empty, and no `authorized_keys` exists anywhere under `/var` — yet `getent passwd dev` resolves, because `/etc` is image-managed.
+
+> **Consequence:** anything baked into the image under `/var` is silently discarded. **Users, SSH keys, and any seeded state must be provisioned at first boot**, not at build time. This cost two rebuild cycles to discover and would have been far more expensive to find later.
+
+**Corollary for development access:** inject debug SSH keys under `/usr` (image-managed, never shadowed) rather than via `[[customizations.user]]`, whose keys land under `/var`. `Containerfile` takes a `DEV_SSH_KEY` build arg that writes to `/usr/share/kotinos/ssh/` plus an sshd drop-in; `build.sh` supplies it from `config.dev.toml` when present. Release builds pass nothing.
+
+**Also confirmed:** `bootc status` reports the booted image and digest correctly, so the upgrade/rollback test in step 6 is viable.
 
 ### Repo-local gotcha
 

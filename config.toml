@@ -9,6 +9,12 @@
 #
 # Subvolumes use the @ prefix convention (openSUSE/Ubuntu) because snapper
 # and grub-btrfs tooling assumes it.
+#
+# There is deliberately no @home subvolume. Fedora bootc makes /home a
+# symlink to /var/home (and /root a symlink to /var/roothome), so a
+# subvolume mounted at /home is never used -- verified on a running system,
+# where @home existed but was mounted nowhere. All user data lives under
+# /var, which @var covers.
 
 [[customizations.disk.partitions]]
 type = "btrfs"
@@ -18,13 +24,13 @@ minsize = "20 GiB"
 name = "@"
 mountpoint = "/"
 
-[[customizations.disk.partitions.subvolumes]]
-name = "@home"
-mountpoint = "/home"
-
-# /var is the unproven part of this layout. bootc populates /var from the
-# image on first boot and shares it across deployments; if that collides
-# with var.mount at runtime, drop this block and keep @home.
+# The user-data volume: /var holds /var/home, /var/roothome, logs and app
+# state. This is what snapper snapshots for the data safety net (M2).
+#
+# Note: when /var is its own subvolume, bootc does NOT copy the image's /var
+# into it -- systemd-tmpfiles creates a bare skeleton instead. Anything baked
+# into the image under /var (user homes, SSH keys) is silently discarded, so
+# users must be provisioned at first boot, not at build time.
 [[customizations.disk.partitions.subvolumes]]
 name = "@var"
 mountpoint = "/var"

@@ -15,6 +15,9 @@ output/
 # baked into test images. Must never be committed.
 config.dev.toml
 
+# Test-VM keypair and credentials.
+.dev-secrets/
+
 # OS cruft
 .DS_Store
 Thumbs.db
