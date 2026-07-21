@@ -42,6 +42,21 @@ RUN chmod 0755 /usr/libexec/kotinos-firstboot && \
       > /usr/lib/kotinos/firstboot.conf && \
     systemctl enable kotinos-firstboot.service
 
+# Safety net (M2).
+#
+# snapper snapshots /var, which is where all user data lives. This is the layer
+# bootc deliberately does not cover: bootc rollback restores the OS and leaves
+# /var untouched, so without this a destructive command is unrecoverable.
+RUN dnf install -y snapper && dnf clean all
+
+COPY files/kotinos-snapshots.sh /usr/libexec/kotinos-snapshots
+COPY files/kotinos-snapshots.service /usr/lib/systemd/system/kotinos-snapshots.service
+COPY files/kotinos-escalate.sh /usr/libexec/kotinos-escalate
+
+RUN chmod 0755 /usr/libexec/kotinos-snapshots /usr/libexec/kotinos-escalate && \
+    systemctl enable kotinos-snapshots.service && \
+    systemctl enable snapper-timeline.timer snapper-cleanup.timer
+
 # Optional development access. Empty in release builds.
 #
 # Fedora bootc places every account's home under /var (/root -> /var/roothome,

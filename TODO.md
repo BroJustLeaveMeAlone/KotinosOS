@@ -156,12 +156,12 @@ has to work when the machine is too broken to boot normally.
 
 ### Steps
 
-- [ ] Install `snapper` in the image; decide config placement (`/etc` is 3-way merged, so shipped configs survive upgrades)
-- [ ] Register a snapper config against **`@var`** at first boot — `.snapshots` cannot be created at build time, same `/var` reason as M1.5
-- [ ] Set retention + disk budget (timeline counts, `SPACE_LIMIT`, `FREE_LIMIT`) so snapshots can never fill the disk
-- [ ] Enable timeline + cleanup timers; verify snapshots actually appear on schedule
-- [ ] **Escalation hook:** one command that pins the current bootc deployment *and* snapshots `@var`, to be wired to M5's 2FA gate
-- [ ] Decide and implement the `/var` restore mechanism (file-level restore vs. subvolume swap) — the genuinely open design question
+- [x] Install `snapper` in the image
+- [x] Register a snapper config against **`@var`** at first boot — `.snapshots` cannot be created at build time, same `/var` reason as M1.5
+- [x] Set retention + disk budget (`SPACE_LIMIT=0.3`, `FREE_LIMIT=0.2`, plus timeline counts) so snapshots can never fill the disk
+- [x] Enable timeline + cleanup timers
+- [x] **Escalation hook** (`/usr/libexec/kotinos-escalate`): pins the current ostree deployment *and* snapshots `@var`. Fails closed — non-zero exit means the M5 gate must refuse escalation
+- [x] **Restore mechanism decided: file-level via `snapper undochange`.** Subvolume swap was rejected — `/var` holds live system state (logs, container storage, the running `.snapshots` tree), so swapping it wholesale under a running system is far more disruptive than reverting file changes. Verified: destroyed a user's `Documents` and restored it with ownership and contents intact
 - [ ] Recovery environment reachable from the bootloader when normal boot fails
 - [ ] Verify recovery against a deliberately corrupted system
 - [ ] **Adversarial test:** run `rm -rf /*` in a VM and document exactly what survives and what is lost

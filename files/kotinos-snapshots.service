@@ -1,0 +1,24 @@
+[Unit]
+Description=KotinosOS snapshot configuration
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+# Registering a snapper config creates .snapshots inside /var, so /var must be
+# the real mount before this runs.
+RequiresMountsFor=/var
+After=local-fs.target kotinos-firstboot.service
+
+# The baseline snapshot should capture the provisioned account, so this must
+# follow provisioning rather than race it.
+Wants=kotinos-firstboot.service
+
+ConditionPathExists=!/var/lib/kotinos/.snapshots-configured
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/kotinos-snapshots
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
