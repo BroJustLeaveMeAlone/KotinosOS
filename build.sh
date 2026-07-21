@@ -23,7 +23,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Override when the repo lives on a Windows drvfs mount (/mnt/c/...): osbuild
 # needs xattrs and SELinux labels that drvfs cannot provide, so the disk image
 # must be written to a Linux-native filesystem and copied out afterwards.
-OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/output}"
+OUTPUT_DIR="${OUTPUT_DIR:-${REPO_ROOT}/build-output}"
 
 if [[ $EUID -ne 0 ]]; then
     echo "error: must run as root (podman needs to be rootful here)" >&2
@@ -31,10 +31,10 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Development SSH key, if the credentials overlay is present. Release builds
-# have no config.dev.toml and so bake in no key.
+# have no dev-credentials.toml and so bake in no key.
 DEV_SSH_KEY=""
-if [[ -f "${REPO_ROOT}/config.dev.toml" ]]; then
-    DEV_SSH_KEY="$(grep -o 'ssh-[a-z0-9-]* [A-Za-z0-9+/=]* *[^"]*' "${REPO_ROOT}/config.dev.toml" | head -1)"
+if [[ -f "${REPO_ROOT}/dev-credentials.toml" ]]; then
+    DEV_SSH_KEY="$(grep -o 'ssh-[a-z0-9-]* [A-Za-z0-9+/=]* *[^"]*' "${REPO_ROOT}/dev-credentials.toml" | head -1)"
 fi
 
 echo "==> Building ${IMAGE}"
@@ -53,14 +53,14 @@ mkdir -p "${OUTPUT_DIR}"
 
 # Merge the committed disk layout with the gitignored credentials overlay,
 # if present. TOML arrays-of-tables concatenate cleanly, so no key conflicts.
-# Release builds must run without config.dev.toml present.
+# Release builds must run without dev-credentials.toml present.
 BUILD_CONFIG="$(mktemp /tmp/kotinos-config.XXXXXX.toml)"
 trap 'rm -f "${BUILD_CONFIG}"' EXIT
-cat "${REPO_ROOT}/config.toml" > "${BUILD_CONFIG}"
-if [[ -f "${REPO_ROOT}/config.dev.toml" ]]; then
-    echo "    including config.dev.toml (test credentials -- not for release)"
+cat "${REPO_ROOT}/disk-layout.toml" > "${BUILD_CONFIG}"
+if [[ -f "${REPO_ROOT}/dev-credentials.toml" ]]; then
+    echo "    including dev-credentials.toml (test credentials -- not for release)"
     printf '\n' >> "${BUILD_CONFIG}"
-    cat "${REPO_ROOT}/config.dev.toml" >> "${BUILD_CONFIG}"
+    cat "${REPO_ROOT}/dev-credentials.toml" >> "${BUILD_CONFIG}"
 fi
 
 podman run --rm --privileged \

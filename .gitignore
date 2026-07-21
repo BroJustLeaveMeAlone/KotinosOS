@@ -1,4 +1,5 @@
 # Build artifacts
+build-output/
 output/
 *.vhd
 *.vhdx
@@ -13,6 +14,7 @@ output/
 
 # Development credentials overlay -- contains a password hash and SSH key
 # baked into test images. Must never be committed.
+dev-credentials.toml
 config.dev.toml
 
 # Test-VM keypair and credentials.

@@ -152,7 +152,7 @@ The image boots in Hyper-V and was inspected over SSH. Runtime layout:
 
 > **Consequence:** anything baked into the image under `/var` is silently discarded. **Users, SSH keys, and any seeded state must be provisioned at first boot**, not at build time. This cost two rebuild cycles to discover and would have been far more expensive to find later.
 
-**Corollary for development access:** inject debug SSH keys under `/usr` (image-managed, never shadowed) rather than via `[[customizations.user]]`, whose keys land under `/var`. `Containerfile` takes a `DEV_SSH_KEY` build arg that writes to `/usr/share/kotinos/ssh/` plus an sshd drop-in; `build.sh` supplies it from `config.dev.toml` when present. Release builds pass nothing.
+**Corollary for development access:** inject debug SSH keys under `/usr` (image-managed, never shadowed) rather than via `[[customizations.user]]`, whose keys land under `/var`. `Containerfile` takes a `DEV_SSH_KEY` build arg that writes to `/usr/share/kotinos/ssh/` plus an sshd drop-in; `build.sh` supplies it from `dev-credentials.toml` when present. Release builds pass nothing.
 
 **3. `/boot` mounts far too late, which silently breaks rollback.** The image builder generates `boot.mount` with `WantedBy=multi-user.target`, so `/boot` appeared roughly **two minutes** after boot. `bootc` needs `/boot` to write bootloader state; run `bootc rollback` before it mounts and the command reports *"Next boot: rollback deployment"*, changes nothing, and the next boot returns to the same deployment. Two rollbacks were lost this way before the cause was found.
 

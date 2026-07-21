@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/kotinos-logo.png" alt="KotinosOS logo — an olive wreath" width="160">
+  <img src="./branding/kotinos-logo.png" alt="KotinosOS logo — an olive wreath" width="160">
 </p>
 
 <h1 align="center">KotinosOS</h1>
@@ -52,8 +52,12 @@ Full technical detail lives in [`PLAN.md`](./PLAN.md).
 | Path | Purpose |
 |---|---|
 | `Containerfile` | The OS image definition (pinned to `fedora-bootc:44`). |
-| `config.toml` | Disk layout — Btrfs with `@` (root) and `@var` (user data) subvolumes. |
+| `disk-layout.toml` | Btrfs partitioning — `@` (root) and `@var` (user data) subvolumes. |
+| `system-scripts/` | Scripts installed into the OS: first-boot provisioning, snapshots, escalation capture, recovery, health check. |
+| `systemd-units/` | systemd units that run those scripts. |
+| `branding/` | Logo and brand assets. |
 | `build.sh` | Builds the image and converts it to a bootable disk image. |
+| `build-output/` | Generated disk images (not committed). |
 | `PLAN.md` | Architecture, milestones, and design decisions. |
 | `TODO.md` | Per-milestone step tracking and progress. |
 
@@ -68,7 +72,7 @@ Full technical detail lives in [`PLAN.md`](./PLAN.md).
 sudo ./build.sh v1 vhd
 ```
 
-`build.sh` builds the container from `Containerfile`, then runs the image builder against `config.toml` to produce a bootable disk image in `output/`. Output type is selectable (`vhd`, `qcow2`, `raw`).
+`build.sh` builds the container from `Containerfile`, then runs the image builder against `disk-layout.toml` to produce a bootable disk image in `build-output/`. Output type is selectable (`vhd`, `qcow2`, `raw`).
 
 ## Roadmap
 

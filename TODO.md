@@ -33,12 +33,13 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 ## Project setup ✅
 
 - [x] Name chosen: **KotinosOS** (olive wreath of the ancient Olympic Games)
-- [x] Logo added (`assets/kotinos-logo.png`) and shown in README
+- [x] Logo added (`branding/kotinos-logo.png`) and shown in README
 - [x] Repository live at `BroJustLeaveMeAlone/KotinosOS`
 - [x] README written (vision, architecture, build steps, roadmap)
 - [x] LF line endings enforced (`.gitattributes`) — CRLF would break shebangs and unit files inside the image
+- [x] **BOM guard in `Containerfile`** — a UTF-8 BOM before a shebang stops the kernel finding the interpreter, and the script still works under `bash script.sh`, so the breakage hides. Editing on Windows introduces BOMs easily; the build now fails on one
 - [ ] **Choose a license** — until one exists, nobody may legally use or contribute
-- [ ] **Rename directories to say what they hold.** `files/` is meaningless — everything is files. Same rule for anything added later: no `src/`, `lib/`, `utils/`
+- [x] **Directories renamed to say what they hold.** `files/` → `system-scripts/` + `systemd-units/`, `assets/` → `branding/`, `output/` → `build-output/`, `config.toml` → `disk-layout.toml`, `config.dev.toml` → `dev-credentials.toml`. Same rule for anything added later: no `src/`, `lib/`, `utils/`
 - [ ] Logo: transparent-background PNG + SVG (current asset is white-background, shows a white box on dark themes)
 
 ---
@@ -61,7 +62,7 @@ surviving every transition.
 
 ### Unplanned steps that emerged
 
-- [x] **Dev access strategy.** Gitignored `config.dev.toml` overlay merged at build time, so no password hash ever lands in git history
+- [x] **Dev access strategy.** Gitignored `dev-credentials.toml` overlay merged at build time, so no password hash ever lands in git history
 - [x] **Credentials persisted** to `.dev-secrets/` (gitignored) — they were only in a session-scoped temp dir
 - [x] **Local OCI registry.** `registry:2` in WSL, bridged to the guest via `netsh portproxy` on the NAT gateway. Required because `bootc upgrade` can't resolve a `localhost/` ref inside the VM. *(This is early M7 groundwork.)*
 - [x] **Fix: dropped `@home`** after finding it mounted nowhere and its mount unit failing
@@ -110,7 +111,7 @@ is on `@var`, created at first boot, that survives an upgrade and a rollback.
 ### Steps
 
 - [x] **Mechanism chosen: systemd oneshot unit.** Preferred over cloud-init (heavy, cloud-oriented) and `systemd-firstboot` (handles locale/hostname, not real user accounts). Gated by a stamp file in `/var` rather than `ConditionFirstBoot`, because the stamp lives on the same volume as the thing it guards — if `/var` is ever reset, provisioning correctly runs again
-- [x] Provisioning unit + script shipped under `/usr` (`files/kotinos-firstboot.{sh,service}`), image-managed so it cannot be shadowed
+- [x] Provisioning unit + script shipped under `/usr` (`system-scripts/` + `systemd-units/`), image-managed so it cannot be shadowed
 - [x] Account created at first boot: user, `wheel`, home at `/var/home/<user>`, shell
 - [x] SSH keys installed into the real runtime home as the primary path; `/usr` debug path kept as recovery
 - [x] Idempotent — `RequiresMountsFor=/var`, stamp at `/var/lib/kotinos/.provisioned`, never clobbers an existing home

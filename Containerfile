@@ -33,8 +33,8 @@ RUN install -d /usr/lib/systemd/system/local-fs.target.wants \
 # on first boot. The service below creates the account on the running machine.
 ARG DEFAULT_USER=kotinos
 
-COPY files/kotinos-firstboot.sh /usr/libexec/kotinos-firstboot
-COPY files/kotinos-firstboot.service /usr/lib/systemd/system/kotinos-firstboot.service
+COPY system-scripts/kotinos-firstboot.sh /usr/libexec/kotinos-firstboot
+COPY systemd-units/kotinos-firstboot.service /usr/lib/systemd/system/kotinos-firstboot.service
 
 RUN chmod 0755 /usr/libexec/kotinos-firstboot && \
     install -d /usr/lib/kotinos && \
@@ -52,11 +52,11 @@ RUN chmod 0755 /usr/libexec/kotinos-firstboot && \
 RUN dnf install -y snapper rsync greenboot greenboot-default-health-checks && \
     dnf clean all
 
-COPY files/kotinos-snapshots.sh /usr/libexec/kotinos-snapshots
-COPY files/kotinos-snapshots.service /usr/lib/systemd/system/kotinos-snapshots.service
-COPY files/kotinos-escalate.sh /usr/libexec/kotinos-escalate
-COPY files/kotinos-recover.sh /usr/libexec/kotinos-recover
-COPY files/kotinos-health-check.sh /usr/lib/greenboot/check/required.d/50-kotinos-health.sh
+COPY system-scripts/kotinos-snapshots.sh /usr/libexec/kotinos-snapshots
+COPY systemd-units/kotinos-snapshots.service /usr/lib/systemd/system/kotinos-snapshots.service
+COPY system-scripts/kotinos-escalate.sh /usr/libexec/kotinos-escalate
+COPY system-scripts/kotinos-recover.sh /usr/libexec/kotinos-recover
+COPY system-scripts/kotinos-health-check.sh /usr/lib/greenboot/check/required.d/50-kotinos-health.sh
 
 RUN chmod 0755 /usr/libexec/kotinos-snapshots \
                 /usr/libexec/kotinos-escalate \
@@ -76,6 +76,17 @@ RUN chmod 0755 /usr/libexec/kotinos-snapshots \
 RUN systemctl is-enabled greenboot-healthcheck.service && \
     systemctl is-enabled kotinos-snapshots.service && \
     systemctl is-enabled kotinos-firstboot.service
+
+# Reject UTF-8 BOMs in anything executable. Editing on Windows introduces them
+# easily (PowerShell's Set-Content -Encoding utf8 writes one), and a BOM before
+# the shebang makes the kernel fail to find the interpreter -- the script then
+# only works when invoked as `bash script.sh`, so the breakage hides until
+# something calls it directly.
+RUN for f in /usr/libexec/kotinos-* /usr/lib/greenboot/check/required.d/50-kotinos-health.sh; do \
+      if head -c3 "$f" | od -An -tx1 | grep -q 'ef bb bf'; then \
+        echo "ERROR: UTF-8 BOM in $f" >&2; exit 1; \
+      fi; \
+    done
 
 # Optional development access. Empty in release builds.
 #
