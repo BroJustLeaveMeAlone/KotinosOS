@@ -20,7 +20,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 |---|---|---|
 | **M1** | Foundation — bootable image, subvolumes, rollback proven | ✅ **Complete** (21 Jul 2026) |
 | **M1.5** | First-boot provisioning — create accounts in the live `/var` | ✅ **Complete** (21 Jul 2026) |
-| **M2** | Safety net — snapper, escalation hook, recovery environment | ⬜ Not started |
+| **M2** | Safety net — snapper, escalation hook, recovery environment | ✅ **Complete** (21 Jul 2026) |
 | M3 | Desktop & appliance UX | ⬜ Not started |
 | M4 | Sandboxing & hardening | ⬜ Not started |
 | M5 | Admin mode & offline 2FA | ⬜ Not started |
@@ -140,7 +140,10 @@ locking us out of the machine — which happened twice during M1.
 
 ---
 
-## Milestone 2 — Safety net 🚧 IN PROGRESS
+## Milestone 2 — Safety net ✅ COMPLETE
+
+> All four exit criteria met. One gap found along the way (no spare deployment
+> on a fresh install) is deferred to M7, where the installer can fix it properly.
 
 **In plain words:** the OS can already undo a bad *update*. This milestone lets
 it undo a bad *day* — accidental deletion, a botched config, a destructive
