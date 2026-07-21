@@ -82,6 +82,7 @@ sudo ./build.sh v1 vhd
 | **M1.5** | First-boot provisioning | Accounts created on the running machine, not baked into the image |
 | **M2** | Safety net | snapper, snapshot-on-escalation, recovery environment |
 | M3 | Desktop & UX | Restricted settings app, first-boot, appliance shell |
+| M3.5 | Identity & comfort | Boot splash, motion language, theming, friction removal |
 | M4 | Sandboxing | Flatpak-only apps, hardened defaults |
 | M5 | Admin mode | Offline 2FA, policy-layer enforcement |
 | M6 | AI assistant | Constrained command execution + semantic file search |
@@ -92,4 +93,16 @@ sudo ./build.sh v1 vhd
 
 ## License
 
-Not yet decided. Until a license is added, no permissions are granted beyond viewing.
+KotinosOS is licensed under the **GNU General Public License v3.0** — see
+[`LICENSE`](./LICENSE).
+
+Copyleft was chosen deliberately: anyone who ships a modified KotinosOS has to
+publish their changes. A safety net people are asked to trust their data to
+should be inspectable by the people trusting it, and a closed fork could quietly
+weaken exactly the guarantees this project exists to make.
+
+**Name and logo are not covered by the GPL.** "KotinosOS" and the olive-wreath
+mark identify this project specifically. You may freely use, modify and
+redistribute the code; please use your own name and branding for a modified
+distribution, so users can tell whose work they are running. This is the usual
+arrangement across Linux distributions.

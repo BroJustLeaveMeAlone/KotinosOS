@@ -269,6 +269,16 @@ Delivers pillar 4 and the project's most defensible idea.
 
 **M3 — Desktop and appliance UX (pillar 1).** Desktop environment still undecided; KDE Plasma is the likely answer since the AI sidebar needs to dock over arbitrary windows and Plasma's scripting makes that tractable where GNOME's extension API is restrictive and breaks between releases. Includes the restricted settings app, first-boot flow, and browser/search selection at install. Note: Chrome cannot be bundled in a redistributable image for licensing reasons — ship Chromium or Firefox, fetch Chrome post-install.
 
+**M3.5 — Identity and comfort.** Added after M2, once it was clear the roadmap
+described plumbing but never the thing that makes KotinosOS *itself*. Boot
+splash, a single animation language, own icon/cursor/sound themes, system-wide
+accent colour, scheduled light/dark, curated presets instead of infinite knobs.
+Plus the comfort features that remove work from the user: a friendly face on the
+M2 snapshot restore ("go back to yesterday"), silent background updates, a
+plain-English "what changed" after an update, and auto-cleanup with a visible
+budget so nobody meets "disk full". Kept separate from M3 because polish sharing
+a milestone with plumbing is polish that gets cut.
+
 **M4 — Sandboxing and hardening (pillar 5).** Flatpak-only application model, SELinux enforcing, `bubblewrap` for system services. Make the write-protection of backup and recovery storage concrete and testable.
 
 **M5 — God mode and 2FA (pillar 3).** Offline TOTP or FIDO2, no network dependency. **Must resolve the threat-model gap first:** gating a settings *GUI* behind 2FA protects nothing if the user already has a shell. Enforcement has to live at the policy layer — a `polkit` agent or LSM — or it's theater. Decide this before writing UI.

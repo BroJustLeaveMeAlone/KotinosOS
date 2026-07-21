@@ -21,7 +21,8 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | **M1** | Foundation — bootable image, subvolumes, rollback proven | ✅ **Complete** (21 Jul 2026) |
 | **M1.5** | First-boot provisioning — create accounts in the live `/var` | ✅ **Complete** (21 Jul 2026) |
 | **M2** | Safety net — snapper, escalation hook, recovery environment | ✅ **Complete** (21 Jul 2026) |
-| M3 | Desktop & appliance UX | ⬜ Not started |
+| M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ⬜ Not started |
+| M3.5 | Identity & comfort — look, motion, personalization, friction removal | ⬜ Not started |
 | M4 | Sandboxing & hardening | ⬜ Not started |
 | M5 | Admin mode & offline 2FA | ⬜ Not started |
 | M6 | AI assistant (+ M6b semantic file layer) | ⬜ Not started |
@@ -138,6 +139,46 @@ M3 collects a real one. The dev key is installed in two places on purpose: the
 normal path (copied into the user's home at first boot) and a recovery path read
 straight from `/usr` by sshd, so a bug in provisioning is debuggable instead of
 locking us out of the machine — which happened twice during M1.
+
+---
+
+## Milestone 3.5 — Identity & comfort ⬜ NOT STARTED
+
+**In plain words:** make KotinosOS look and feel like *itself*, and take work
+away from the user.
+
+**Why it is separate from M3.** M3 is plumbing — a shell exists, settings open,
+hardware works. None of that stops the result being a Fedora respin with a
+different wallpaper. Identity is a distinct body of work, and if it shares a
+milestone with plumbing it is the first thing cut when the milestone runs long.
+The distro that "looks and feels different" is the whole point, so it gets its
+own phase.
+
+Steps get written when we begin. Candidates gathered so far:
+
+**Visual identity & motion**
+- Boot splash with the wreath; never scrolling kernel text (needs the SVG logo)
+- One animation language — a single timing curve shared by windows, workspaces, and the AI sidebar
+- Own icon, cursor and sound themes; stock ones give away the base distro
+- Login and lock screens continuous with the boot splash
+- Honour reduced-motion preferences throughout
+
+**Personalization — many tasteful choices, zero dangerous ones**
+- System-wide accent colour (highlights, cursor, app chrome)
+- Light/dark on a sunrise/sunset schedule, with manual override
+- A single comfort slider for text and UI size, not per-app scaling
+- Curated theme presets rather than infinite knobs — the restriction principle applied to aesthetics
+- Time-of-day wallpapers
+
+**Comfort — actual friction removal**
+- **"Go back to yesterday"** — a friendly face on the snapshot restore built in M2. The engine exists and currently has no UI
+- **Silent updates** — applied in the background, effective at next reboot, never interrupting. bootc makes this natural and it beats every mainstream OS
+- **"What changed?"** — a plain-English summary after an update
+- **Auto-cleanup with a visible budget** — snapshots, caches, downloads. The user should never meet "disk full"
+- Automatic power and thermal profiles; no manual power management
+- Focus mode that genuinely silences the whole system
+- Offline-first help that works with no internet
+- Errors explained in plain English instead of a log (overlaps M6)
 
 ---
 
