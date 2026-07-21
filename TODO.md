@@ -158,10 +158,18 @@ Steps get written when we begin. Candidates gathered so far:
 
 **Visual identity & motion**
 - Boot splash with the wreath; never scrolling kernel text (needs the SVG logo)
-- One animation language — a single timing curve shared by windows, workspaces, and the AI sidebar
+- **Spring-based motion system, macOS-grade smoothness.** macOS feels fluid because motion is *physics*, not fixed-duration easing: things decelerate naturally and an interrupted animation blends into the new one instead of snapping. One spring configuration (stiffness/damping) shared by windows, workspaces and the AI sidebar, so everything moves like one system.
+  - *Legal note:* the technique is public and widely reimplemented; Apple's protected material is their assets and code. Same physics and restraint, our own artwork — no exposure.
+  - Practical requirement: this only looks right if the compositor never drops frames, so vsync and frame pacing come first. Smooth-at-60fps beats elaborate-and-stuttering.
 - Own icon, cursor and sound themes; stock ones give away the base distro
 - Login and lock screens continuous with the boot splash
 - Honour reduced-motion preferences throughout
+
+**Window management — everything stays visible**
+- **Clicking one window must never hide another.** Windows arrange so they coexist rather than stack: position them freely and keep using all of them at once. This is the opposite of macOS Stage Manager, which hides what you are not focused on.
+- Implementation direction: a tiling/mosaic layout on Wayland (KWin tiling, or a scrollable-tiling compositor) where windows do not overlap by default, with focus changing *without* raise-over-others.
+- Fits the comfort principle exactly: the user should never be doing window management as a chore — no hunting for a window that vanished behind another.
+- Open question for the build phase: whether overlapping floating windows are allowed at all, or only as a deliberate opt-in.
 
 **Personalization — many tasteful choices, zero dangerous ones**
 - System-wide accent colour (highlights, cursor, app chrome)
@@ -178,7 +186,38 @@ Steps get written when we begin. Candidates gathered so far:
 - Automatic power and thermal profiles; no manual power management
 - Focus mode that genuinely silences the whole system
 - Offline-first help that works with no internet
-- Errors explained in plain English instead of a log (overlaps M6)
+- ~~Errors explained in plain English instead of a log~~ — *dropped by decision*
+
+---
+
+## Hardware auto-tuning ⬜ NOT STARTED — belongs to M3
+
+**In plain words:** the machine reads its own hardware at first boot and picks
+the best settings for every component, with no questions asked. Pillar 1, and
+currently the least specified part of the roadmap — "zero-config" was stated as
+a goal but never as a mechanism.
+
+A profiler runs at first boot, detects what it is running on, and writes tuned
+configuration. Every value it chooses stays overridable in admin mode.
+
+| Detected | Tuned |
+|---|---|
+| CPU vendor/model | scaling governor, energy-performance preference |
+| GPU | correct driver enabled, power profile |
+| Storage type (NVMe / SSD / HDD) | I/O scheduler, TRIM |
+| RAM size | swappiness, zram size |
+| Battery present | laptop vs. desktop power profile |
+| Display | resolution, refresh rate, fractional scaling / HiDPI |
+| Network adapter | power-save behaviour |
+| Thermals | fan curve where the platform allows |
+
+Design constraints:
+- Runs at first boot like the other `/var`-dependent setup, and re-runs when
+  hardware changes (different machine, new GPU) rather than only once
+- Writes decisions to a readable log — "why is my governor set to X" must be
+  answerable
+- Every choice overridable in admin mode; auto-tuning is a *default*, not a lock
+- Conservative when unsure: a wrong aggressive setting is worse than a safe one
 
 ---
 

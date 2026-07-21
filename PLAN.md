@@ -267,12 +267,31 @@ Delivers pillar 4 and the project's most defensible idea.
 
 > Detail below is planned against assumptions milestone 1 will test. Treat ordering as firm and specifics as revisable.
 
+**Hardware auto-tuning (pillar 1, inside M3).** "Zero-config" was stated as a
+goal throughout but never as a mechanism, which left the most-promised feature
+the least specified. A profiler runs at first boot, detects CPU, GPU, storage
+type, RAM, battery presence, display and network adapter, and writes tuned
+settings for each — governor, I/O scheduler, swappiness, power profile,
+refresh rate and scaling. It re-runs when the hardware changes rather than only
+once, logs *why* each choice was made so the machine can be questioned, stays
+conservative when unsure, and leaves every value overridable in admin mode.
+Auto-tuning is a default, never a lock.
+
 **M3 — Desktop and appliance UX (pillar 1).** Desktop environment still undecided; KDE Plasma is the likely answer since the AI sidebar needs to dock over arbitrary windows and Plasma's scripting makes that tractable where GNOME's extension API is restrictive and breaks between releases. Includes the restricted settings app, first-boot flow, and browser/search selection at install. Note: Chrome cannot be bundled in a redistributable image for licensing reasons — ship Chromium or Firefox, fetch Chrome post-install.
 
 **M3.5 — Identity and comfort.** Added after M2, once it was clear the roadmap
 described plumbing but never the thing that makes KotinosOS *itself*. Boot
-splash, a single animation language, own icon/cursor/sound themes, system-wide
-accent colour, scheduled light/dark, curated presets instead of infinite knobs.
+splash, own icon/cursor/sound themes, system-wide accent colour, scheduled
+light/dark, curated presets instead of infinite knobs.
+
+Two decisions worth stating here. **Motion is spring physics, not fixed-duration
+easing** — that is what makes macOS feel fluid, and it is public technique
+(Apple's protected material is assets and code, not the approach). It only works
+if the compositor never drops frames, so frame pacing is a prerequisite, not a
+polish item. **Windows coexist rather than stack**: clicking one must never hide
+another, which points at a tiling/mosaic layout with focus change that does not
+raise over other windows. Both serve the same principle — the user should never
+be doing housekeeping the machine could do.
 Plus the comfort features that remove work from the user: a friendly face on the
 M2 snapshot restore ("go back to yesterday"), silent background updates, a
 plain-English "what changed" after an update, and auto-cleanup with a visible
