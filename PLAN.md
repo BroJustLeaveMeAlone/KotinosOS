@@ -306,7 +306,19 @@ a milestone with plumbing is polish that gets cut.
 
 **M6b — Semantic file layer (the "different filesystem").** Background indexer building full-text + embedding indexes of file contents; a single location-independent search surface in the shell (M3), content-aware via the local model (M6). Index on idle to honor the zero-resource-management promise; keep the index encrypted and on-device. Shares the model and infrastructure with M6, so it follows naturally from it.
 
-**M7 — Distribution infrastructure.** Installer ISO (`anaconda-iso`), image signing, Secure Boot enrollment, container registry hosting, release channels (stable/beta), update cadence. The step where "my project" becomes "other people's computers."
+**M7 — Distribution infrastructure.** Installer ISO (`anaconda-iso`), image signing, Secure Boot, container registry hosting, release channels (stable/beta), update cadence. The step where "my project" becomes "other people's computers."
+
+Trust is enforced by UEFI firmware, not the kernel: firmware verifies
+`shim` → GRUB → kernel and refuses unsigned components while Secure Boot is on.
+Deriving from Fedora should mean inheriting their Microsoft-signed boot chain,
+since Secure Boot checks that chain rather than the whole filesystem — which
+avoids a months-long signing process with Microsoft. **This is assumed, not
+verified**, so it is scheduled as an early test rather than an M7 discovery; if
+false, it is architectural. Consequences: do not replace `shim`, GRUB or the
+kernel casually, out-of-tree modules still need MOK enrolment, and "disable
+Secure Boot" must never be the install instruction for a distro selling safety.
+Separately, update signing (sigstore/cosign) is what stops a machine accepting
+an image that is not ours, and is required before anyone else installs this.
 
 **M8 — Hardware QA and v1.0.** Define supported hardware targets and test matrix. Solo-realistic scope: name a small set of known-good machines rather than claiming broad support.
 

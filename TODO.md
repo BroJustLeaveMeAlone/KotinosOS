@@ -39,7 +39,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 - [x] README written (vision, architecture, build steps, roadmap)
 - [x] LF line endings enforced (`.gitattributes`) — CRLF would break shebangs and unit files inside the image
 - [x] **BOM guard in `Containerfile`** — a UTF-8 BOM before a shebang stops the kernel finding the interpreter, and the script still works under `bash script.sh`, so the breakage hides. Editing on Windows introduces BOMs easily; the build now fails on one
-- [ ] **Choose a license** — until one exists, nobody may legally use or contribute
+- [ ] **Test Secure Boot early** — every VM so far has run with it *disabled*. Deriving from Fedora *should* mean we inherit their Microsoft-signed `shim`/GRUB/kernel and boot with Secure Boot on, but that is an assumption, not a result. If it turns out false, it is an architecture-level problem, and finding that at M7 would be brutal. The test is cheap: one Gen2 VM with the Microsoft UEFI CA template and Secure Boot enabled
 - [x] **Directories renamed to say what they hold.** `files/` → `system-scripts/` + `systemd-units/`, `assets/` → `branding/`, `output/` → `build-output/`, `config.toml` → `disk-layout.toml`, `config.dev.toml` → `dev-credentials.toml`. Same rule for anything added later: no `src/`, `lib/`, `utils/`
 - [x] **Logo: transparent-background PNG** (`branding/kotinos-logo-transparent.png`) — white background removed with a luminance ramp so leaf edges stay smooth, then cropped to the artwork. No more white box on dark themes
 - [ ] Logo: **SVG version** — needed for the boot splash, favicon, and installer, where the mark must scale to any size. The PNG cannot do that job
@@ -139,6 +139,43 @@ M3 collects a real one. The dev key is installed in two places on purpose: the
 normal path (copied into the user's home at first boot) and a recovery path read
 straight from `/usr` by sshd, so a bug in provisioning is debuggable instead of
 locking us out of the machine — which happened twice during M1.
+
+---
+
+## Installing on real machines — notes for M7
+
+Collected early because one item needs testing long before M7 starts.
+
+**Trust is enforced by UEFI firmware, not the kernel.** Firmware verifies a
+signature chain — `shim` → GRUB → kernel — and refuses to boot anything unsigned
+while Secure Boot is on. The kernel is the *subject* of that check, not the
+enforcer of it.
+
+**Deriving from Fedora is a major advantage here.** Fedora's `shim` is signed by
+Microsoft's UEFI CA, and Secure Boot verifies the boot chain rather than the
+whole filesystem. A derived image that does not replace those components should
+boot with Secure Boot enabled, inheriting the signing. Getting a *new* shim
+signed by Microsoft is a months-long process; inheriting avoids it entirely.
+**Unverified so far — every test VM has had Secure Boot off.**
+
+Consequences to respect:
+- Do not replace `shim`, GRUB or the kernel without accepting the signing burden
+- Out-of-tree kernel modules (NVIDIA being the obvious one) are *not* covered and
+  need MOK enrolment or their own signing
+- Never ship "just disable Secure Boot" as the install instruction. For a distro
+  whose entire pitch is comfort and safety, telling users to switch off a
+  security feature is the wrong first impression
+
+**"Will a PC think it is a virus?"** The ISO itself is not scanned by the target
+machine — it is booted, not executed under Windows. The real exposure is a
+*Windows-side helper*: any `.exe` we ship to write USB sticks would trip
+SmartScreen without an EV code-signing certificate. Cheapest correct answer is to
+ship no Windows binary at all and point users at Rufus or balenaEtcher, which are
+already trusted and solve the problem for free.
+
+**Update signing is separate.** bootc can verify container signatures
+(sigstore/cosign) so a machine only accepts updates genuinely from us. Distinct
+from Secure Boot, and required before anyone else installs this.
 
 ---
 
