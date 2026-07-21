@@ -41,7 +41,7 @@ KotinosOS ships as an **OCI container image** built with [bootc](https://bootc.d
 **A two-layer safety net**, because the two failure modes are different:
 
 - **bootc** protects the *operating system*. Bad update, broken driver, failed boot → atomic rollback at the bootloader. `/usr` is read-only, so system files can't be deleted.
-- **Btrfs + snapper** protect the *user's data* under `/home` and `/var` — the part bootc deliberately never rolls back. This is what saves someone from their own destructive command.
+- **Btrfs + snapper** protect the *user's data* under `/var` — the part bootc deliberately never rolls back. This is what saves someone from their own destructive command. (Fedora bootc keeps every home under `/var`: `/home` is a symlink to `/var/home`, `/root` to `/var/roothome`.)
 
 On top of Btrfs sits a **semantic file layer**: a background indexer builds full-text *and* embedding indexes so files are found by content and meaning, not just location — the same local model that powers the assistant, doing double duty.
 
@@ -52,7 +52,7 @@ Full technical detail lives in [`PLAN.md`](./PLAN.md).
 | Path | Purpose |
 |---|---|
 | `Containerfile` | The OS image definition (pinned to `fedora-bootc:44`). |
-| `config.toml` | Disk layout — Btrfs with `@`, `@home`, `@var` subvolumes. |
+| `config.toml` | Disk layout — Btrfs with `@` (root) and `@var` (user data) subvolumes. |
 | `build.sh` | Builds the image and converts it to a bootable disk image. |
 | `PLAN.md` | Architecture, milestones, and design decisions. |
 | `TODO.md` | Per-milestone step tracking and progress. |
