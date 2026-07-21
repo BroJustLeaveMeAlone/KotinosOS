@@ -1,4 +1,8 @@
-# KotinosOS
+<p align="center">
+  <img src="./assets/kotinos-logo.png" alt="KotinosOS logo — an olive wreath" width="160">
+</p>
+
+<h1 align="center">KotinosOS</h1>
 
 **A standalone, comfort-first Linux distribution with a native AI and an unbreakable safety net.**
 
