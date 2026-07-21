@@ -154,7 +154,23 @@ The image boots in Hyper-V and was inspected over SSH. Runtime layout:
 
 **Corollary for development access:** inject debug SSH keys under `/usr` (image-managed, never shadowed) rather than via `[[customizations.user]]`, whose keys land under `/var`. `Containerfile` takes a `DEV_SSH_KEY` build arg that writes to `/usr/share/kotinos/ssh/` plus an sshd drop-in; `build.sh` supplies it from `config.dev.toml` when present. Release builds pass nothing.
 
-**Also confirmed:** `bootc status` reports the booted image and digest correctly, so the upgrade/rollback test in step 6 is viable.
+**3. `/boot` mounts far too late, which silently breaks rollback.** The image builder generates `boot.mount` with `WantedBy=multi-user.target`, so `/boot` appeared roughly **two minutes** after boot. `bootc` needs `/boot` to write bootloader state; run `bootc rollback` before it mounts and the command reports *"Next boot: rollback deployment"*, changes nothing, and the next boot returns to the same deployment. Two rollbacks were lost this way before the cause was found.
+
+> **Fix, now in `Containerfile`:** a drop-in pulling `boot.mount` into `local-fs.target`. `/boot` now mounts ~5 s after boot instead of ~2 min, and rollback takes effect.
+
+**Diagnostic note:** ostree does *not* rewrite `/boot/loader/entries` on rollback — it swaps the `/ostree/boot.N` symlink farm, so entry timestamps stay unchanged. Unchanged timestamps are **not** evidence of a failed rollback; check `ostree admin status` instead.
+
+### Step 6 result — rollback proven end-to-end ✅
+
+Full cycle executed against a local registry (`registry:2` in WSL, reached by the guest through a `netsh portproxy` on the NAT gateway):
+
+| Stage | Booted | Digest | Sentinel in `/var` |
+|---|---|---|---|
+| v1 (initial) | `BUILD_ID=v1` | `c44709f0…` | written |
+| after `bootc upgrade` | `BUILD_ID=v2` | `a79e87c5…` | survived |
+| after `bootc rollback` | `BUILD_ID=v1` | `c44709f0…` | survived |
+
+`/var` remained on `subvol=@var` throughout. **The two-layer model is empirically real: the OS rolled back while user data persisted.**
 
 ### Repo-local gotcha
 

@@ -13,6 +13,19 @@ ARG BUILD_ID=dev
 RUN printf 'NAME="KotinosOS"\nID=kotinos\nBUILD_ID="%s"\nBASE="fedora-bootc:44"\n' "${BUILD_ID}" \
       > /usr/lib/kotinos-release
 
+# The image builder generates /boot's mount unit with WantedBy=multi-user.target,
+# so /boot mounts roughly two minutes into boot. bootc needs /boot to write
+# bootloader state: run `bootc rollback` before it mounts and the rollback is
+# accepted, silently does nothing, and the next boot returns to the same
+# deployment. Pull the mount into local-fs.target so it happens early.
+#
+# The unit itself is generated at disk-image time, not here, so this installs
+# the enablement symlink and an ordering drop-in that apply once it exists.
+RUN install -d /usr/lib/systemd/system/local-fs.target.wants \
+                /usr/lib/systemd/system/boot.mount.d && \
+    printf '[Unit]\nBefore=local-fs.target\n\n[Install]\nWantedBy=local-fs.target\n' \
+      > /usr/lib/systemd/system/boot.mount.d/10-early.conf
+
 # Optional development access. Empty in release builds.
 #
 # Fedora bootc places every account's home under /var (/root -> /var/roothome,
