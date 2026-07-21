@@ -55,6 +55,7 @@ Full technical detail lives in [`PLAN.md`](./PLAN.md).
 | `config.toml` | Disk layout — Btrfs with `@`, `@home`, `@var` subvolumes. |
 | `build.sh` | Builds the image and converts it to a bootable disk image. |
 | `PLAN.md` | Architecture, milestones, and design decisions. |
+| `TODO.md` | Per-milestone step tracking and progress. |
 
 ## Building
 
@@ -82,7 +83,7 @@ sudo ./build.sh v1 vhd
 | M7 | Distribution | Installer, signing, update channels |
 | M8 | Hardware QA | Supported-hardware matrix, v1.0 |
 
-*Currently: **M1**, foundation.*
+**M1 is complete** — the image boots, `/var` lives on its own Btrfs subvolume, and the full `v1 → upgrade → v2 → rollback → v1` cycle was verified with user data surviving every transition. Step-by-step progress is tracked in [`TODO.md`](./TODO.md).
 
 ## License
 
