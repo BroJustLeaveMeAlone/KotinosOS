@@ -19,6 +19,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | | Milestone | Status |
 |---|---|---|
 | **M1** | Foundation — bootable image, subvolumes, rollback proven | ✅ **Complete** (21 Jul 2026) |
+| **M1.5** | First-boot provisioning — create accounts in the live `/var` | ⬜ Not started |
 | **M2** | Safety net — snapper, escalation hook, recovery environment | ⬜ Not started |
 | M3 | Desktop & appliance UX | ⬜ Not started |
 | M4 | Sandboxing & hardening | ⬜ Not started |
@@ -85,11 +86,44 @@ surviving every transition.
 
 ---
 
+## Milestone 1.5 — First-boot provisioning ⬜ NOT STARTED
+
+**In plain words:** make the machine create your user account the first time it
+boots.
+
+**Why this exists.** M1 finding #2: when `/var` is its own subvolume, bootc does
+not copy the image's `/var` into it — systemd-tmpfiles lays down a bare
+skeleton instead. Every account's home lives under `/var` (`/home` →
+`/var/home`, `/root` → `/var/roothome`), so **any user baked into the image is
+silently discarded at first boot.** This locked us out of our own VM twice.
+Provisioning therefore has to happen on the running machine, not at build time.
+
+**Why it blocks M2.** Snapper, the escalation hook, and admin mode all assume a
+real user account exists and that its data lives somewhere snapshottable.
+Building those on a system that can't reliably create a user means testing the
+safety net against nothing.
+
+**Exit criteria:** boot a fresh image and land with a working account whose home
+is on `@var`, created at first boot, that survives an upgrade and a rollback.
+
+### Steps
+
+- [ ] Choose the provisioning mechanism (systemd oneshot vs. cloud-init vs. `systemd-firstboot`) and record why
+- [ ] Ship the provisioning unit + script in the image under `/usr` (image-managed, so it can't be shadowed)
+- [ ] Create the account at first boot: user, `wheel` membership, home under `/var/home`, shell
+- [ ] Install SSH keys into the real runtime home, replacing the `/usr` debug-key workaround as the *primary* path (keep the debug path for recovery)
+- [ ] Make it idempotent — stamp file in `/var` so it runs exactly once, and never clobbers an existing home
+- [ ] Get SELinux contexts right on the created home and `.ssh` (wrong labels break key auth even when the file is correct)
+- [ ] Verify on a clean VM: account exists, `/var/home/<user>` populated, key login works
+- [ ] Verify it persists across `bootc upgrade` and `bootc rollback`
+- [ ] Decide how the real product asks for the username/password (hand off to M3's first-run experience)
+
+---
+
 ## Milestone 2 — Safety net ⬜ NOT STARTED
 
 Steps get written here when we begin. Carried forward from M1:
 
-- **Prerequisite:** first-boot user provisioning (see finding #2 above) — decide whether it belongs in M2 or lands as its own small phase first
 - snapper must target **`@var`**, not `/home`
 - Escalation hook: pin the bootc deployment *and* snapshot `@var` before granting admin mode
 - Recovery environment reachable from the bootloader

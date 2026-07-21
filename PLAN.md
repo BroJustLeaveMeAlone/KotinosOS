@@ -235,6 +235,23 @@ The milestone actually turns on this step:
 
 ---
 
+## Milestone 1.5 — First-boot provisioning
+
+Added after M1, which proved it necessary rather than optional.
+
+Because a separate `/var` subvolume does not inherit the image's `/var`, and
+because every home lives under `/var`, **accounts cannot be baked into the
+image** — they are discarded at first boot. Provisioning must run on the
+booted machine.
+
+This blocks M2: snapper, the escalation hook, and admin mode all assume a real
+account exists with data in a snapshottable location.
+
+**Exit criteria:** a fresh image boots to a working account whose home is on
+`@var`, created at first boot, surviving an upgrade and a rollback.
+
+---
+
 ## Milestone 2 — Complete the safety net
 
 Delivers pillar 4 and the project's most defensible idea.

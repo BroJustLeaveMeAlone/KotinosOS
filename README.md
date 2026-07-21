@@ -75,6 +75,7 @@ sudo ./build.sh v1 vhd
 | | Milestone | Delivers |
 |---|---|---|
 | **M1** | Foundation | Bootable image, Btrfs subvolumes, rollback proven end-to-end |
+| **M1.5** | First-boot provisioning | Accounts created on the running machine, not baked into the image |
 | **M2** | Safety net | snapper, snapshot-on-escalation, recovery environment |
 | M3 | Desktop & UX | Restricted settings app, first-boot, appliance shell |
 | M4 | Sandboxing | Flatpak-only apps, hardened defaults |
