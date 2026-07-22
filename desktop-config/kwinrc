@@ -1,0 +1,73 @@
+# KWin defaults for KotinosOS.
+#
+# Installed to /etc/xdg/kwinrc as system-wide defaults. Users can still change
+# these; they are the starting point, not a restriction.
+#
+# Two goals: windows that coexist rather than stack, and motion that feels
+# deliberate.
+#
+# Honest scope note: this file tunes the *timing* of KWin's existing animations.
+# The spring-physics motion described in the plan -- where an interrupted
+# animation blends into the next instead of snapping -- is not configuration.
+# KWin animates on fixed-duration curves, so true spring behaviour needs a
+# custom KWin effect written against its animation API. That is a real
+# development task, not a settings change, and it is deliberately not pretended
+# to be done here.
+
+[Compositing]
+# OpenGL with automatic backend selection. Frame pacing matters more than any
+# effect: a dropped frame is more visible than a missing animation.
+Backend=OpenGL
+GLCore=true
+# Never tear. On a desktop that sells calm, tearing is the most jarring
+# artifact there is, and it is far more noticeable than a few ms of latency.
+AllowTearing=false
+LatencyPolicy=Medium
+WindowsBlockCompositing=false
+
+[Effect-overview]
+# The overview is how the user finds a window without hunting. It should feel
+# instant.
+BorderActivate=9
+
+[Plugins]
+# Deliberately enabled: the ones that help the user understand what just
+# happened. Motion here is explanatory, not decorative.
+slideEnabled=true
+scaleEnabled=true
+dimscreenEnabled=true
+fadingpopupsEnabled=true
+# Deliberately disabled: novelty effects that cost frames and age badly.
+wobblywindowsEnabled=false
+magiclampEnabled=false
+cubeEnabled=false
+sheetEnabled=false
+
+[TabBox]
+# Alt-Tab shows a list rather than a fullscreen takeover, so switching does not
+# obscure what the user is switching away from.
+LayoutName=thumbnail_grid
+HighlightWindows=true
+
+[Windows]
+# Focus follows the click, and clicking does NOT raise the window above others.
+# This is the core of "nothing disappears when you click elsewhere": in the
+# default click-to-focus-and-raise model, interacting with one window buries
+# another, which is exactly the housekeeping the user should never be doing.
+FocusPolicy=ClickToFocus
+ClickRaise=false
+AutoRaise=false
+# Placement that avoids covering existing windows where it can.
+Placement=Centered
+# Snapping makes manual arrangement feel intentional instead of fiddly.
+BorderSnapZone=12
+WindowSnapZone=12
+CenterSnapZone=0
+
+[Tiling]
+# Padding between tiled windows. Small, so the layout reads as one surface
+# rather than scattered panes.
+padding=4
+
+[Xwayland]
+Scale=1

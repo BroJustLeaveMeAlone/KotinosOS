@@ -134,6 +134,13 @@ RUN dnf install -y \
 # unbootable, unloggable-into, or quietly insecure.
 COPY desktop-config/kotinos-kiosk-restrictions /etc/xdg/kdeglobals
 
+# Window behaviour and compositing defaults (M3.5).
+#
+# The important line inside is ClickRaise=false: clicking a window focuses it
+# without burying its neighbours, which is what "nothing disappears when you
+# click another window" actually requires.
+COPY desktop-config/kwinrc /etc/xdg/kwinrc
+
 # First-run defaults, applied once per user on first graphical login.
 #
 # Runs as the user rather than root: these are per-user Plasma settings, and
