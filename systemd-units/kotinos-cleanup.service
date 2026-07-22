@@ -1,0 +1,20 @@
+[Unit]
+Description=KotinosOS disk housekeeping
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+RequiresMountsFor=/var
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kotinos-cleanup
+
+# Housekeeping must never compete with the user for the machine. It is not
+# urgent -- being an hour late costs nothing, being noticeable costs the whole
+# "you never think about maintenance" promise.
+Nice=19
+IOSchedulingClass=idle
+CPUSchedulingPolicy=idle
+
+StandardOutput=journal
+StandardError=journal

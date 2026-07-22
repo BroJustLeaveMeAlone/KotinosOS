@@ -1,0 +1,21 @@
+[Unit]
+Description=Run KotinosOS disk housekeeping periodically
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+[Timer]
+# Hourly is frequent enough to catch a disk filling up before anything fails,
+# and the script exits immediately when there is space, so the cost of a tick is
+# nearly nothing.
+OnBootSec=15min
+OnUnitActiveSec=1h
+
+# Spread the actual run across a window. Without this, every KotinosOS machine
+# on a network wakes and does disk work at the same instant.
+RandomizedDelaySec=10min
+
+# Catch up after the machine has been off, rather than skipping silently -- a
+# laptop closed for a week is exactly when the disk quietly filled.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
