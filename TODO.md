@@ -21,8 +21,8 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | **M1** | Foundation — bootable image, subvolumes, rollback proven | ✅ **Complete** (21 Jul 2026) |
 | **M1.5** | First-boot provisioning — create accounts in the live `/var` | ✅ **Complete** (21 Jul 2026) |
 | **M2** | Safety net — snapper, escalation hook, recovery environment | ✅ **Complete** (21 Jul 2026) |
-| M3 | Desktop & appliance UX — shell, settings, first-run, hardware | 🚧 **In progress** |
-| M3.5 | Identity & comfort — look, motion, personalization, friction removal | ⬜ Not started |
+| M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ✅ **Core complete** (22 Jul 2026) — wizard outstanding |
+| M3.5 | Identity & comfort — look, motion, personalization, friction removal | 🚧 **In progress** — splash, windows, comfort features done |
 | M4 | Sandboxing & hardening | ⬜ Not started |
 | M5 | Admin mode & offline 2FA | ⬜ Not started |
 | M6 | AI assistant (+ M6b semantic file layer) | ⬜ Not started |
@@ -288,8 +288,43 @@ smoothness** in a VM. M3.5's motion work needs real hardware to evaluate.
 - [x] **Hardware auto-tuning profiler** written (detailed below)
 - [x] First-run defaults written — accent, light/dark on the clock, browser, search engine
 - [x] Settings surface restricted via Plasma's Kiosk framework
-- [ ] **Not yet verified on a running system:** hardware tuner output, kiosk restrictions, first-run defaults. All three are written and built but need a login to confirm
+- [x] **All of the above verified on a running system** — 28 checks, 0 failures, against `BUILD_ID=m3-final` booted with Secure Boot on
 - [ ] Graphical first-run *wizard* (asking the questions rather than applying defaults) — still to build
+
+### Verification (22 Jul 2026)
+
+Ran against a live VM. The hardware tuner's own decision log, on a 2-vCPU
+Hyper-V guest:
+
+```
+cpu       Intel Core i7-10700 @ 2.90GHz   detected, 2 threads
+memory    2 GiB                           detected
+chassis   desktop                         battery absent
+memory    swappiness=100                  <=8 GiB, favour compressed swap
+memory    zram=0.5 of RAM                 sized to installed RAM
+storage   scheduler rules installed       rotational=yes solid-state=no
+cpu       left alone                      no cpufreq driver (likely virtualised)
+```
+
+That last line is the "conservative when unsure" rule working: the VM exposes
+no cpufreq driver, so it set no governor rather than guessing.
+
+**Two process failures worth remembering, both mine:**
+
+1. **A failed build reported success.** The wrapper was
+   `./build.sh … > log 2>&1; echo "EXIT=$?"` — the trailing `echo` always
+   succeeds, so the shell returned 0 while the build had died. A *stale* disk
+   image was then converted, booted, and verified, producing 15 false failures
+   before the `BUILD_ID` in the output revealed the wrong system was under test.
+   Always branch on the build's own exit status.
+2. **The boot splash never worked.** `ModuleName=script` needs
+   `plymouth-plugin-script`, which was not installed. **The assertion caught
+   it** — without `plymouth-set-default-theme | grep -qx kotinos`, the image
+   would have built clean and quietly used Fedora's default splash.
+
+Second is the fourth instance of this project's signature failure: something
+reporting success while doing nothing. It is also the second time an assertion
+added specifically to catch that class of bug did its job.
 
 ---
 
