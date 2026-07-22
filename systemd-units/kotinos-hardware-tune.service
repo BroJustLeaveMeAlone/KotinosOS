@@ -1,0 +1,27 @@
+[Unit]
+Description=KotinosOS hardware auto-tuning
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+# Writes its fingerprint and decision log under /var, so /var must be the real
+# mount rather than the directory the real one is about to cover.
+RequiresMountsFor=/var
+After=local-fs.target
+
+# Tuning should be in place before the desktop and user sessions start, so the
+# first thing the user sees is already running on the right settings.
+Before=display-manager.service systemd-user-sessions.service
+
+# Deliberately no ConditionPathExists guard: this runs every boot and exits
+# immediately when the hardware fingerprint is unchanged. Gating it on a stamp
+# would mean a machine that gained a GPU, or a disk moved to a different
+# computer, kept settings chosen for hardware it no longer has.
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/kotinos-hardware-tune
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

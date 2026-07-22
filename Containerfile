@@ -88,6 +88,17 @@ RUN for f in /usr/libexec/kotinos-* /usr/lib/greenboot/check/required.d/50-kotin
       fi; \
     done
 
+# Hardware auto-tuning (M3): read the machine, pick settings for each component.
+# pciutils provides lspci, which the profiler uses for GPU detection.
+RUN dnf install -y pciutils && dnf clean all
+
+COPY system-scripts/kotinos-hardware-tune.sh /usr/libexec/kotinos-hardware-tune
+COPY systemd-units/kotinos-hardware-tune.service /usr/lib/systemd/system/kotinos-hardware-tune.service
+
+RUN chmod 0755 /usr/libexec/kotinos-hardware-tune && \
+    systemctl enable kotinos-hardware-tune.service && \
+    systemctl is-enabled kotinos-hardware-tune.service
+
 # Desktop (M3): KDE Plasma 6 on Wayland.
 #
 # Chosen because the AI sidebar (M6) has to dock over arbitrary windows, which
