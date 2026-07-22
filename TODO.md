@@ -39,7 +39,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 - [x] README written (vision, architecture, build steps, roadmap)
 - [x] LF line endings enforced (`.gitattributes`) — CRLF would break shebangs and unit files inside the image
 - [x] **BOM guard in `Containerfile`** — a UTF-8 BOM before a shebang stops the kernel finding the interpreter, and the script still works under `bash script.sh`, so the breakage hides. Editing on Windows introduces BOMs easily; the build now fails on one
-- [ ] **Test Secure Boot early** — every VM so far has run with it *disabled*. Deriving from Fedora *should* mean we inherit their Microsoft-signed `shim`/GRUB/kernel and boot with Secure Boot on, but that is an assumption, not a result. If it turns out false, it is an architecture-level problem, and finding that at M7 would be brutal. The test is cheap: one Gen2 VM with the Microsoft UEFI CA template and Secure Boot enabled
+- [x] **Secure Boot verified working** (22 Jul 2026) — booted a Gen2 VM with Secure Boot **on** and the `MicrosoftUEFICertificateAuthority` template. Confirmed from inside the guest: `mokutil --sb-state` → *SecureBoot enabled*, EFI variable set, `dmesg` → *"Kernel is locked down from EFI Secure Boot mode"*, Fedora's signed `shimx64.efi` in place, our image healthy. **We inherit Fedora's Microsoft-signed boot chain and sign nothing ourselves.** Users will never be told to disable Secure Boot
 - [x] **Directories renamed to say what they hold.** `files/` → `system-scripts/` + `systemd-units/`, `assets/` → `branding/`, `output/` → `build-output/`, `config.toml` → `disk-layout.toml`, `config.dev.toml` → `dev-credentials.toml`. Same rule for anything added later: no `src/`, `lib/`, `utils/`
 - [x] **Logo: transparent-background PNG** (`branding/kotinos-logo-transparent.png`) — white background removed with a luminance ramp so leaf edges stay smooth, then cropped to the artwork. No more white box on dark themes
 - [ ] Logo: **SVG version** — needed for the boot splash, favicon, and installer, where the mark must scale to any size. The PNG cannot do that job
@@ -151,12 +151,24 @@ signature chain — `shim` → GRUB → kernel — and refuses to boot anything 
 while Secure Boot is on. The kernel is the *subject* of that check, not the
 enforcer of it.
 
-**Deriving from Fedora is a major advantage here.** Fedora's `shim` is signed by
-Microsoft's UEFI CA, and Secure Boot verifies the boot chain rather than the
-whole filesystem. A derived image that does not replace those components should
-boot with Secure Boot enabled, inheriting the signing. Getting a *new* shim
-signed by Microsoft is a months-long process; inheriting avoids it entirely.
-**Unverified so far — every test VM has had Secure Boot off.**
+**Deriving from Fedora is a major advantage here — and it is now proven.**
+Fedora's `shim` is signed by Microsoft's UEFI CA, and Secure Boot verifies the
+boot chain rather than the whole filesystem, so our derived image inherits the
+signing. Getting a *new* shim signed by Microsoft is a months-long process;
+inheriting avoids it entirely.
+
+**Verified 22 Jul 2026:** a Gen2 VM with Secure Boot **on** and the
+`MicrosoftUEFICertificateAuthority` template booted our image normally.
+Confirmed inside the guest — `mokutil --sb-state` reported *SecureBoot enabled*,
+the EFI variable was set, `dmesg` logged *"Kernel is locked down from EFI Secure
+Boot mode"*, `shimx64.efi` was Fedora's, and the health check passed.
+
+**Consequence discovered by the test: Secure Boot puts the kernel in `integrity`
+lockdown mode.** That is a security gain, but it restricts things — hibernation
+is disabled, and unsigned kernel modules will not load. Power management (M3.5)
+must plan for suspend rather than hibernate, and any out-of-tree driver needs
+MOK enrolment. Better to design around now than to discover when a laptop
+refuses to hibernate.
 
 Consequences to respect:
 - Do not replace `shim`, GRUB or the kernel without accepting the signing burden

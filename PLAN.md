@@ -310,11 +310,15 @@ a milestone with plumbing is polish that gets cut.
 
 Trust is enforced by UEFI firmware, not the kernel: firmware verifies
 `shim` → GRUB → kernel and refuses unsigned components while Secure Boot is on.
-Deriving from Fedora should mean inheriting their Microsoft-signed boot chain,
-since Secure Boot checks that chain rather than the whole filesystem — which
-avoids a months-long signing process with Microsoft. **This is assumed, not
-verified**, so it is scheduled as an early test rather than an M7 discovery; if
-false, it is architectural. Consequences: do not replace `shim`, GRUB or the
+Deriving from Fedora means inheriting their Microsoft-signed boot chain, since
+Secure Boot checks that chain rather than the whole filesystem — which avoids a
+months-long signing process with Microsoft. **Verified 22 Jul 2026:** the image
+boots with Secure Boot enabled under the `MicrosoftUEFICertificateAuthority`
+template, with the kernel confirming *"Secure boot enabled"* and running from
+Fedora's signed `shimx64.efi`. We sign nothing ourselves, and users are never
+asked to turn Secure Boot off. The test also showed Secure Boot forces kernel
+lockdown in `integrity` mode, which disables hibernation and blocks unsigned
+modules — so power management should plan for suspend, not hibernate. Consequences: do not replace `shim`, GRUB or the
 kernel casually, out-of-tree modules still need MOK enrolment, and "disable
 Secure Boot" must never be the install instruction for a distro selling safety.
 Separately, update signing (sigstore/cosign) is what stops a machine accepting
