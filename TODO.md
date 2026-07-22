@@ -211,9 +211,14 @@ own phase.
 - [x] Effects split by purpose: motion that *explains* (slide, scale, fades) kept; novelty that costs frames (wobbly windows, cube) removed
 - [x] Accent colour and scheduled light/dark applied at first run
 - [ ] **Spring-physics motion — NOT done, and not a config change.** KWin animates on fixed-duration curves. True spring behaviour, where an interrupted animation blends into the next instead of snapping, needs a **custom KWin effect written against its animation API**. That is a development task. What exists today is tuned timing on stock animations, which is *not* the same thing and should not be mistaken for it
+- [x] **"Go back to yesterday"** (`kotinos-go-back`) — M2 built a working restore engine and gave it no way in. This presents restore points as *"yesterday, 14:30"* and *"before I unlocked admin mode"* rather than numbered subvolumes. A thin wrapper over `kotinos-recover`, so there is still exactly one restore path and it is the tested one. Snapshots the current state first, because undoing the undo has to be possible or nobody risks using it
+- [x] **Silent updates** — bootc stages, applies at next reboot, greenboot health-checks it, a failure rolls back automatically. All three pieces already existed; enabling the timer made them a feature. An update that breaks the machine un-breaks itself before the user notices
+- [x] **"What changed?"** (`kotinos-whats-changed`) — silent must not mean secret. Diffs the running deployment against the previous one and leads with what a person cares about (kernel, graphics, browser, desktop) rather than 400 library names. Ends by naming both undo paths, since "what changed?" is usually asked when something feels wrong
+- [x] **Auto-cleanup with a budget** (`kotinos-cleanup`) — acts only above 80% and stops at 70%. Reclaims in order of least regret: rebuildable caches, then unreferenced images, then oldest routine snapshots. Never touches pre-escalation snapshots or user files. Runs at idle CPU/IO priority, because housekeeping the user can feel defeats the purpose
 - [ ] Own icon, cursor and sound themes
 - [ ] Curated theme presets
 - [ ] Time-of-day wallpapers
+- [ ] Focus mode; offline-first help
 
 ### Remaining candidates
 
