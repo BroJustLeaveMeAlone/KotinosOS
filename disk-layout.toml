@@ -34,3 +34,29 @@ mountpoint = "/"
 [[customizations.disk.partitions.subvolumes]]
 name = "@var"
 mountpoint = "/var"
+
+# The vault: a protected copy of the irreplaceable files.
+#
+# A SEPARATE PARTITION, not a subvolume, and deliberately given NO mountpoint.
+#
+# Both of those choices are the feature. Snapshots live inside the same
+# filesystem as the data they protect, so `btrfs subvolume delete` or ransomware
+# running as the user can destroy them. A separate partition with no mountpoint
+# is never attached to the running system at all -- the vault service mounts it,
+# writes, and unmounts, so the window in which anything could reach it is
+# seconds per day rather than always.
+#
+# You cannot encrypt, delete or corrupt a filesystem that is not mounted.
+#
+# ext4 rather than btrfs: the vault wants boring and robust, not clever. It
+# needs no snapshots of its own (it stores versioned copies via hardlinks) and
+# ext4 has no copy-on-write fragmentation to worry about.
+#
+# Size is set at install time to roughly a tenth of the disk. Documents and
+# configs are small, and hardlinking unchanged files between versions means
+# several full versions cost barely more than one.
+[[customizations.disk.partitions]]
+type = "plain"
+label = "kotinos-vault"
+fs_type = "ext4"
+minsize = "8 GiB"

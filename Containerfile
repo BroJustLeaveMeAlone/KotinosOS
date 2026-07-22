@@ -60,6 +60,10 @@ COPY system-scripts/kotinos-go-back.sh /usr/libexec/kotinos-go-back
 COPY system-scripts/kotinos-cleanup.sh /usr/libexec/kotinos-cleanup
 COPY system-scripts/kotinos-whats-changed.sh /usr/libexec/kotinos-whats-changed
 COPY system-scripts/kotinos-space.sh /usr/libexec/kotinos-space
+COPY system-scripts/kotinos-vault.sh /usr/libexec/kotinos-vault
+COPY systemd-units/kotinos-vault.service /usr/lib/systemd/system/kotinos-vault.service
+COPY systemd-units/kotinos-vault.timer /usr/lib/systemd/system/kotinos-vault.timer
+COPY desktop-config/vault.conf /etc/kotinos/vault.conf
 COPY systemd-units/kotinos-cleanup.service /usr/lib/systemd/system/kotinos-cleanup.service
 COPY systemd-units/kotinos-cleanup.timer /usr/lib/systemd/system/kotinos-cleanup.timer
 COPY system-scripts/kotinos-health-check.sh /usr/lib/greenboot/check/required.d/50-kotinos-health.sh
@@ -71,7 +75,10 @@ RUN chmod 0755 /usr/libexec/kotinos-snapshots \
                 /usr/libexec/kotinos-cleanup \
                 /usr/libexec/kotinos-whats-changed \
                 /usr/libexec/kotinos-space \
+                /usr/libexec/kotinos-vault \
                 /usr/lib/greenboot/check/required.d/50-kotinos-health.sh && \
+    ln -sf /usr/libexec/kotinos-vault /usr/bin/kotinos-vault && \
+    systemctl enable kotinos-vault.timer && \
     ln -sf /usr/libexec/kotinos-whats-changed /usr/bin/kotinos-whats-changed && \
     ln -sf /usr/libexec/kotinos-space /usr/bin/kotinos-space && \
     ln -sf /usr/libexec/kotinos-cleanup /usr/bin/kotinos-cleanup && \

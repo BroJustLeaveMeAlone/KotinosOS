@@ -1,0 +1,31 @@
+[Unit]
+Description=Protect irreplaceable files in the vault
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+RequiresMountsFor=/var
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kotinos-vault backup
+
+# The vault must be unmounted when this finishes, whatever happened. The script
+# unmounts in a trap, and this is the backstop: a vault left mounted after a
+# crashed backup is a vault that is writable until the next reboot, which
+# defeats the entire design.
+ExecStopPost=-/bin/sh -c 'mountpoint -q /run/kotinos-vault && umount /run/kotinos-vault || true'
+
+# Backing up must never be something the user can feel.
+Nice=19
+IOSchedulingClass=idle
+CPUSchedulingPolicy=idle
+
+# The service handles files it does not own, so limit what else it can reach.
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+
+StandardOutput=journal
+StandardError=journal

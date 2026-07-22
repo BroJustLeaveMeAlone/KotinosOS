@@ -1,0 +1,21 @@
+[Unit]
+Description=Protect irreplaceable files regularly
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+[Timer]
+# Daily. The vault is the deep tier -- snapshots already cover "I deleted
+# something an hour ago", so this does not need to be frequent. Less frequent
+# also means the vault spends less total time mounted, which is the whole point.
+OnCalendar=daily
+OnBootSec=20min
+
+# Spread the run, so every KotinosOS machine on a network does not wake and do
+# disk work at the same moment.
+RandomizedDelaySec=30min
+
+# A laptop that was closed all day should still get its backup, rather than
+# silently skipping until it happens to be awake at the right moment.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
