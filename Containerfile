@@ -108,9 +108,16 @@ RUN systemctl is-enabled greenboot-healthcheck.service && \
 # the shebang makes the kernel fail to find the interpreter -- the script then
 # only works when invoked as `bash script.sh`, so the breakage hides until
 # something calls it directly.
+#
+# Syntax-check them in the same pass. These scripts run at boot, on a timer, or
+# during recovery -- places where a typo surfaces as a machine that will not
+# come up, long after the build that introduced it.
 RUN for f in /usr/libexec/kotinos-* /usr/lib/greenboot/check/required.d/50-kotinos-health.sh; do \
       if head -c3 "$f" | od -An -tx1 | grep -q 'ef bb bf'; then \
         echo "ERROR: UTF-8 BOM in $f" >&2; exit 1; \
+      fi; \
+      if ! bash -n "$f"; then \
+        echo "ERROR: syntax error in $f" >&2; exit 1; \
       fi; \
     done
 
