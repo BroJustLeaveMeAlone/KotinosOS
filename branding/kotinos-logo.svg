@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="KotinosOS olive wreath">
+  <title>KotinosOS</title>
+  <defs>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b5f57"/>
+      <stop offset="0.55" stop-color="#0f766e"/>
+      <stop offset="1" stop-color="#17a394"/>
+    </linearGradient>
+  </defs>
+  <g fill="url(#leaf)">
+    <polyline points="231.5,93.7 219.6,95.8 207.8,98.7 196.2,102.5 185.0,107.0 174.1,112.2 163.5,118.3 153.4,125.0 143.8,132.4 134.7,140.4 126.2,149.1 118.4,158.3 111.1,168.1 104.6,178.3 98.8,188.9 93.7,199.9 89.4,211.3 85.9,222.9 83.2,234.7 81.3,246.7 80.2,258.8 80.0,270.9 80.6,283.0 82.1,295.1 84.4,307.0 87.5,318.7 91.4,330.2 96.0,341.4 101.5,352.2 107.6,362.7 114.5,372.7 122.1,382.2 130.3,391.1 139.0,399.5 148.4,407.3 158.2,414.3 168.5,420.7 179.3,426.4 190.4,431.3 201.8,435.4 213.4,438.8" fill="none" stroke="#0f766e" stroke-width="5" stroke-linecap="round"/>
+    <path d="M0,0 Q29.6,-17.5 78.0,0 Q29.6,17.5 0,0 Z" transform="translate(231.5,93.7) rotate(156.0)"/>
+    <path d="M0,0 Q29.6,-17.5 78.0,0 Q29.6,17.5 0,0 Z" transform="translate(231.5,93.7) rotate(220.0)"/>
+    <path d="M0,0 Q28.6,-16.9 75.3,0 Q28.6,16.9 0,0 Z" transform="translate(192.4,103.9) rotate(169.2)"/>
+    <path d="M0,0 Q28.6,-16.9 75.3,0 Q28.6,16.9 0,0 Z" transform="translate(192.4,103.9) rotate(233.2)"/>
+    <path d="M0,0 Q27.6,-16.3 72.5,0 Q27.6,16.3 0,0 Z" transform="translate(156.7,122.7) rotate(182.3)"/>
+    <path d="M0,0 Q27.6,-16.3 72.5,0 Q27.6,16.3 0,0 Z" transform="translate(156.7,122.7) rotate(246.3)"/>
+    <path d="M0,0 Q26.5,-15.7 69.8,0 Q26.5,15.7 0,0 Z" transform="translate(126.2,149.1) rotate(195.5)"/>
+    <path d="M0,0 Q26.5,-15.7 69.8,0 Q26.5,15.7 0,0 Z" transform="translate(126.2,149.1) rotate(259.5)"/>
+    <path d="M0,0 Q25.5,-15.0 67.1,0 Q25.5,15.0 0,0 Z" transform="translate(102.6,181.8) rotate(208.7)"/>
+    <path d="M0,0 Q25.5,-15.0 67.1,0 Q25.5,15.0 0,0 Z" transform="translate(102.6,181.8) rotate(272.7)"/>
+    <path d="M0,0 Q24.5,-14.4 64.3,0 Q24.5,14.4 0,0 Z" transform="translate(87.0,219.0) rotate(221.8)"/>
+    <path d="M0,0 Q24.5,-14.4 64.3,0 Q24.5,14.4 0,0 Z" transform="translate(87.0,219.0) rotate(285.8)"/>
+    <path d="M0,0 Q23.4,-13.8 61.6,0 Q23.4,13.8 0,0 Z" transform="translate(80.2,258.8) rotate(235.0)"/>
+    <path d="M0,0 Q23.4,-13.8 61.6,0 Q23.4,13.8 0,0 Z" transform="translate(80.2,258.8) rotate(299.0)"/>
+    <path d="M0,0 Q22.4,-13.2 58.9,0 Q22.4,13.2 0,0 Z" transform="translate(82.8,299.1) rotate(248.2)"/>
+    <path d="M0,0 Q22.4,-13.2 58.9,0 Q22.4,13.2 0,0 Z" transform="translate(82.8,299.1) rotate(312.2)"/>
+    <path d="M0,0 Q21.3,-12.6 56.2,0 Q21.3,12.6 0,0 Z" transform="translate(94.4,337.7) rotate(261.3)"/>
+    <path d="M0,0 Q21.3,-12.6 56.2,0 Q21.3,12.6 0,0 Z" transform="translate(94.4,337.7) rotate(325.3)"/>
+    <path d="M0,0 Q20.3,-12.0 53.4,0 Q20.3,12.0 0,0 Z" transform="translate(114.5,372.7) rotate(274.5)"/>
+    <path d="M0,0 Q20.3,-12.0 53.4,0 Q20.3,12.0 0,0 Z" transform="translate(114.5,372.7) rotate(338.5)"/>
+    <path d="M0,0 Q19.3,-11.4 50.7,0 Q19.3,11.4 0,0 Z" transform="translate(142.1,402.2) rotate(287.7)"/>
+    <path d="M0,0 Q19.3,-11.4 50.7,0 Q19.3,11.4 0,0 Z" transform="translate(142.1,402.2) rotate(351.7)"/>
+    <path d="M0,0 Q18.2,-10.8 48.0,0 Q18.2,10.8 0,0 Z" transform="translate(175.6,424.6) rotate(300.8)"/>
+    <path d="M0,0 Q18.2,-10.8 48.0,0 Q18.2,10.8 0,0 Z" transform="translate(175.6,424.6) rotate(364.8)"/>
+    <path d="M0,0 Q17.2,-10.2 45.2,0 Q17.2,10.2 0,0 Z" transform="translate(213.4,438.8) rotate(314.0)"/>
+    <path d="M0,0 Q17.2,-10.2 45.2,0 Q17.2,10.2 0,0 Z" transform="translate(213.4,438.8) rotate(378.0)"/>
+  </g>
+  <g fill="url(#leaf)">
+    <polyline points="280.5,93.7 292.4,95.8 304.2,98.7 315.8,102.5 327.0,107.0 337.9,112.2 348.5,118.3 358.6,125.0 368.2,132.4 377.3,140.4 385.8,149.1 393.6,158.3 400.9,168.1 407.4,178.3 413.2,188.9 418.3,199.9 422.6,211.3 426.1,222.9 428.8,234.7 430.7,246.7 431.8,258.8 432.0,270.9 431.4,283.0 429.9,295.1 427.6,307.0 424.5,318.7 420.6,330.2 416.0,341.4 410.5,352.2 404.4,362.7 397.5,372.7 389.9,382.2 381.7,391.1 373.0,399.5 363.6,407.3 353.8,414.3 343.5,420.7 332.7,426.4 321.6,431.3 310.2,435.4 298.6,438.8" fill="none" stroke="#0f766e" stroke-width="5" stroke-linecap="round"/>
+    <path d="M0,0 Q29.6,-17.5 78.0,0 Q29.6,17.5 0,0 Z" transform="translate(280.5,93.7) rotate(-40.0)"/>
+    <path d="M0,0 Q29.6,-17.5 78.0,0 Q29.6,17.5 0,0 Z" transform="translate(280.5,93.7) rotate(24.0)"/>
+    <path d="M0,0 Q28.6,-16.9 75.3,0 Q28.6,16.9 0,0 Z" transform="translate(319.6,103.9) rotate(-53.2)"/>
+    <path d="M0,0 Q28.6,-16.9 75.3,0 Q28.6,16.9 0,0 Z" transform="translate(319.6,103.9) rotate(10.8)"/>
+    <path d="M0,0 Q27.6,-16.3 72.5,0 Q27.6,16.3 0,0 Z" transform="translate(355.3,122.7) rotate(-66.3)"/>
+    <path d="M0,0 Q27.6,-16.3 72.5,0 Q27.6,16.3 0,0 Z" transform="translate(355.3,122.7) rotate(-2.3)"/>
+    <path d="M0,0 Q26.5,-15.7 69.8,0 Q26.5,15.7 0,0 Z" transform="translate(385.8,149.1) rotate(-79.5)"/>
+    <path d="M0,0 Q26.5,-15.7 69.8,0 Q26.5,15.7 0,0 Z" transform="translate(385.8,149.1) rotate(-15.5)"/>
+    <path d="M0,0 Q25.5,-15.0 67.1,0 Q25.5,15.0 0,0 Z" transform="translate(409.4,181.8) rotate(-92.7)"/>
+    <path d="M0,0 Q25.5,-15.0 67.1,0 Q25.5,15.0 0,0 Z" transform="translate(409.4,181.8) rotate(-28.7)"/>
+    <path d="M0,0 Q24.5,-14.4 64.3,0 Q24.5,14.4 0,0 Z" transform="translate(425.0,219.0) rotate(-105.8)"/>
+    <path d="M0,0 Q24.5,-14.4 64.3,0 Q24.5,14.4 0,0 Z" transform="translate(425.0,219.0) rotate(-41.8)"/>
+    <path d="M0,0 Q23.4,-13.8 61.6,0 Q23.4,13.8 0,0 Z" transform="translate(431.8,258.8) rotate(-119.0)"/>
+    <path d="M0,0 Q23.4,-13.8 61.6,0 Q23.4,13.8 0,0 Z" transform="translate(431.8,258.8) rotate(-55.0)"/>
+    <path d="M0,0 Q22.4,-13.2 58.9,0 Q22.4,13.2 0,0 Z" transform="translate(429.2,299.1) rotate(-132.2)"/>
+    <path d="M0,0 Q22.4,-13.2 58.9,0 Q22.4,13.2 0,0 Z" transform="translate(429.2,299.1) rotate(-68.2)"/>
+    <path d="M0,0 Q21.3,-12.6 56.2,0 Q21.3,12.6 0,0 Z" transform="translate(417.6,337.7) rotate(-145.3)"/>
+    <path d="M0,0 Q21.3,-12.6 56.2,0 Q21.3,12.6 0,0 Z" transform="translate(417.6,337.7) rotate(-81.3)"/>
+    <path d="M0,0 Q20.3,-12.0 53.4,0 Q20.3,12.0 0,0 Z" transform="translate(397.5,372.7) rotate(-158.5)"/>
+    <path d="M0,0 Q20.3,-12.0 53.4,0 Q20.3,12.0 0,0 Z" transform="translate(397.5,372.7) rotate(-94.5)"/>
+    <path d="M0,0 Q19.3,-11.4 50.7,0 Q19.3,11.4 0,0 Z" transform="translate(369.9,402.2) rotate(-171.7)"/>
+    <path d="M0,0 Q19.3,-11.4 50.7,0 Q19.3,11.4 0,0 Z" transform="translate(369.9,402.2) rotate(-107.7)"/>
+    <path d="M0,0 Q18.2,-10.8 48.0,0 Q18.2,10.8 0,0 Z" transform="translate(336.4,424.6) rotate(-184.8)"/>
+    <path d="M0,0 Q18.2,-10.8 48.0,0 Q18.2,10.8 0,0 Z" transform="translate(336.4,424.6) rotate(-120.8)"/>
+    <path d="M0,0 Q17.2,-10.2 45.2,0 Q17.2,10.2 0,0 Z" transform="translate(298.6,438.8) rotate(-198.0)"/>
+    <path d="M0,0 Q17.2,-10.2 45.2,0 Q17.2,10.2 0,0 Z" transform="translate(298.6,438.8) rotate(-134.0)"/>
+  </g>
+</svg>

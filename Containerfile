@@ -226,7 +226,19 @@ RUN dnf install -y plymouth plymouth-system-theme plymouth-plugin-script && dnf 
 
 COPY desktop-config/plymouth/kotinos.plymouth /usr/share/plymouth/themes/kotinos/kotinos.plymouth
 COPY desktop-config/plymouth/kotinos.script   /usr/share/plymouth/themes/kotinos/kotinos.script
-COPY branding/kotinos-logo-transparent.png    /usr/share/plymouth/themes/kotinos/kotinos-logo.png
+COPY branding/kotinos-logo.svg                /usr/share/kotinos/kotinos-logo.svg
+
+# The splash image is rendered from the SVG at build time rather than shipping a
+# second hand-maintained PNG. One source of truth: change the vector and every
+# derived size follows, instead of drifting apart.
+#
+# Plymouth's script module draws PNGs, not SVGs, so the conversion has to happen
+# somewhere -- doing it here keeps the vector authoritative.
+RUN dnf install -y librsvg2-tools && \
+    rsvg-convert -w 480 -h 480 /usr/share/kotinos/kotinos-logo.svg \
+      -o /usr/share/plymouth/themes/kotinos/kotinos-logo.png && \
+    test -s /usr/share/plymouth/themes/kotinos/kotinos-logo.png && \
+    dnf remove -y librsvg2-tools && dnf clean all
 
 RUN plymouth-set-default-theme kotinos && \
     plymouth-set-default-theme | grep -qx kotinos
