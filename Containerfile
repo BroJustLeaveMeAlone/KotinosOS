@@ -56,13 +56,16 @@ COPY system-scripts/kotinos-snapshots.sh /usr/libexec/kotinos-snapshots
 COPY systemd-units/kotinos-snapshots.service /usr/lib/systemd/system/kotinos-snapshots.service
 COPY system-scripts/kotinos-escalate.sh /usr/libexec/kotinos-escalate
 COPY system-scripts/kotinos-recover.sh /usr/libexec/kotinos-recover
+COPY system-scripts/kotinos-go-back.sh /usr/libexec/kotinos-go-back
 COPY system-scripts/kotinos-health-check.sh /usr/lib/greenboot/check/required.d/50-kotinos-health.sh
 
 RUN chmod 0755 /usr/libexec/kotinos-snapshots \
                 /usr/libexec/kotinos-escalate \
                 /usr/libexec/kotinos-recover \
+                /usr/libexec/kotinos-go-back \
                 /usr/lib/greenboot/check/required.d/50-kotinos-health.sh && \
     ln -sf /usr/libexec/kotinos-recover /usr/bin/kotinos-recover && \
+    ln -sf /usr/libexec/kotinos-go-back /usr/bin/kotinos-go-back && \
     systemctl enable kotinos-snapshots.service && \
     systemctl enable snapper-timeline.timer snapper-cleanup.timer && \
     systemctl enable greenboot-healthcheck.service
