@@ -166,6 +166,8 @@ do_backup() {
         log "nothing to back up"
     fi
 
+    check_vault_space
+
     # Mirror to an external disk if one is present. Optional by design: it adds
     # the protection the same-disk vault cannot offer, for users who plug
     # something in, without making everyone else buy hardware.
@@ -173,6 +175,35 @@ do_backup() {
 
     vault_unmount
     trap - EXIT
+}
+
+# Warn before the vault is full, and say what to do about it.
+#
+# The vault is sized at roughly a tenth of the disk, which for documents and
+# configs is generous -- on a 512 GB machine that is 50 GB of text files and
+# settings. So running out almost never means "the vault is too small"; it
+# nearly always means a large folder ended up in INCLUDE_DIRS, or too many
+# versions are being kept.
+#
+# Both of those are reversible in seconds. Resizing the partition is not, and
+# needs install media with everything unmounted. Suggesting the reversible fixes
+# first is not a cop-out -- it is the correct order of operations.
+check_vault_space() {
+    local pcent
+    pcent="$(df --output=pcent "${VAULT_MOUNT}" 2>/dev/null | tail -1 | tr -dc '0-9')"
+    [[ -n "${pcent}" ]] || return 0
+
+    if (( pcent >= 90 )); then
+        log "WARNING: vault is ${pcent}% full"
+        log "  The usual cause is a large folder in INCLUDE_DIRS, or too many versions kept."
+        log "  Both are in /etc/kotinos/vault.conf and take effect on the next backup:"
+        log "    - lower KEEP_VERSIONS (currently ${KEEP_VERSIONS})"
+        log "    - remove large or reproducible folders from INCLUDE_DIRS"
+        log "  Largest items currently protected:"
+        du -sh "${VAULT_MOUNT}"/*/*/* 2>/dev/null | sort -rh | head -5 | sed 's/^/    /' >> "${VAULT_LOG}" 2>/dev/null
+    elif (( pcent >= 75 )); then
+        log "vault is ${pcent}% full"
+    fi
 }
 
 mirror_external() {

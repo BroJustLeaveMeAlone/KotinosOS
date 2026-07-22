@@ -144,6 +144,14 @@ locking us out of the machine — which happened twice during M1.
 
 ## Installing on real machines — notes for M7
 
+**Vault resizing belongs here, not in a separate tool.** Changing the vault
+partition needs everything unmounted, which is exactly what install media
+already provides — and the installer has to implement partitioning regardless,
+so offering "change vault size" there is marginal work rather than a new
+component. A standalone recovery tool for this would duplicate the installer
+badly. Until then the vault is fixed at ~10%, which is generous for documents
+and settings, and it warns at 75% and 90% with the reversible fixes listed.
+
 Collected early because one item needs testing long before M7 starts.
 
 **Trust is enforced by UEFI firmware, not the kernel.** Firmware verifies a
