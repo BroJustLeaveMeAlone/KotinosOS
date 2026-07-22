@@ -1,0 +1,12 @@
+[Unit]
+Description=Set the wallpaper for the current time of day
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+# A user unit, not a system one: the wallpaper belongs to the session. Setting
+# it as root writes files into the user's config that they can no longer change.
+After=plasma-plasmashell.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kotinos-wallpaper
+Nice=19

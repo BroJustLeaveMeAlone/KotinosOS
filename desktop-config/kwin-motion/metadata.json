@@ -1,0 +1,20 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "KotinosOS"
+            }
+        ],
+        "Description": "One motion language for the whole desktop: fast start, long gentle settle, never linear.",
+        "EnabledByDefault": true,
+        "Icon": "preferences-system-windows-effect-scale",
+        "Id": "kotinosmotion",
+        "License": "GPL-3.0",
+        "Name": "KotinosOS motion",
+        "Version": "1.0"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js",
+    "X-KDE-PluginInfo-Category": "Appearance",
+    "X-KWin-Exclusive-Category": "effects"
+}

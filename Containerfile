@@ -174,6 +174,28 @@ COPY desktop-config/kotinos-kiosk-restrictions /etc/xdg/kdeglobals
 # click another window" actually requires.
 COPY desktop-config/kwinrc /etc/xdg/kwinrc
 
+# One motion language for the whole desktop (M3.5).
+#
+# A KWin script rather than settings, because the point is a *shared* set of
+# durations and curves that everything reuses. See the comments in main.js for
+# why these curves, and for the honest limit: this is spring-like easing, not
+# spring physics. Real spring behaviour, where an interrupted animation
+# continues from its current velocity, needs a C++ effect.
+COPY desktop-config/kwin-motion /usr/share/kwin/scripts/kotinosmotion
+
+# Wallpapers, generated from the brand palette rather than sourced, so they
+# match exactly and can be regenerated at any resolution.
+COPY branding/wallpapers /usr/share/kotinos/wallpapers
+
+COPY system-scripts/kotinos-wallpaper.sh /usr/libexec/kotinos-wallpaper
+COPY systemd-units/kotinos-wallpaper.service /usr/lib/systemd/user/kotinos-wallpaper.service
+COPY systemd-units/kotinos-wallpaper.timer   /usr/lib/systemd/user/kotinos-wallpaper.timer
+
+RUN chmod 0755 /usr/libexec/kotinos-wallpaper && \
+    test -f /usr/share/kwin/scripts/kotinosmotion/contents/code/main.js && \
+    test -f /usr/share/kotinos/wallpapers/kotinos-day.png && \
+    systemctl --global enable kotinos-wallpaper.timer
+
 # First-run defaults, applied once per user on first graphical login.
 #
 # Runs as the user rather than root: these are per-user Plasma settings, and

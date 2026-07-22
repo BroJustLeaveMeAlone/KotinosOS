@@ -31,10 +31,14 @@ WindowsBlockCompositing=false
 BorderActivate=9
 
 [Plugins]
+# Our shared motion language. Replaces the stock scale effect rather than
+# stacking with it -- two animations on the same window fight each other and
+# the result reads as jitter.
+kotinosmotionEnabled=true
+scaleEnabled=false
 # Deliberately enabled: the ones that help the user understand what just
 # happened. Motion here is explanatory, not decorative.
 slideEnabled=true
-scaleEnabled=true
 dimscreenEnabled=true
 fadingpopupsEnabled=true
 # Deliberately disabled: novelty effects that cost frames and age badly.
