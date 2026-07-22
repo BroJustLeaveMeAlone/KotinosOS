@@ -118,6 +118,11 @@ do_backup() {
     local stamp
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
+    # Refresh the record of installed apps first, so the copy taken below
+    # includes an up-to-date one. Restoring documents without knowing which
+    # apps opened them is half a restore.
+    [[ -x /usr/libexec/kotinos-apps ]] && /usr/libexec/kotinos-apps record >/dev/null 2>&1
+
     local rsync_excludes=()
     for glob in "${EXCLUDE_GLOBS[@]}"; do
         rsync_excludes+=(--exclude "${glob}")
@@ -158,6 +163,14 @@ do_backup() {
             log "pruned old vault copy $(basename "${versions[$i]}") for ${user}"
         done
     done
+
+    # The app record belongs in the vault too, not only in /var -- if /var is
+    # gone, so is any knowledge of what was installed.
+    if [[ -r /var/lib/kotinos/installed-apps.txt ]]; then
+        install -d -m 0700 "${VAULT_MOUNT}/_system/${stamp}"
+        cp -a /var/lib/kotinos/installed-apps.txt /var/lib/kotinos/reinstall-apps.sh \
+              "${VAULT_MOUNT}/_system/${stamp}/" 2>/dev/null
+    fi
 
     if (( any )); then
         printf '%s' "${stamp}" > "${VAULT_MOUNT}/.last-backup"
