@@ -59,6 +59,7 @@ COPY system-scripts/kotinos-recover.sh /usr/libexec/kotinos-recover
 COPY system-scripts/kotinos-go-back.sh /usr/libexec/kotinos-go-back
 COPY system-scripts/kotinos-cleanup.sh /usr/libexec/kotinos-cleanup
 COPY system-scripts/kotinos-whats-changed.sh /usr/libexec/kotinos-whats-changed
+COPY system-scripts/kotinos-space.sh /usr/libexec/kotinos-space
 COPY systemd-units/kotinos-cleanup.service /usr/lib/systemd/system/kotinos-cleanup.service
 COPY systemd-units/kotinos-cleanup.timer /usr/lib/systemd/system/kotinos-cleanup.timer
 COPY system-scripts/kotinos-health-check.sh /usr/lib/greenboot/check/required.d/50-kotinos-health.sh
@@ -69,8 +70,11 @@ RUN chmod 0755 /usr/libexec/kotinos-snapshots \
                 /usr/libexec/kotinos-go-back \
                 /usr/libexec/kotinos-cleanup \
                 /usr/libexec/kotinos-whats-changed \
+                /usr/libexec/kotinos-space \
                 /usr/lib/greenboot/check/required.d/50-kotinos-health.sh && \
     ln -sf /usr/libexec/kotinos-whats-changed /usr/bin/kotinos-whats-changed && \
+    ln -sf /usr/libexec/kotinos-space /usr/bin/kotinos-space && \
+    ln -sf /usr/libexec/kotinos-cleanup /usr/bin/kotinos-cleanup && \
     systemctl enable kotinos-cleanup.timer && \
     ln -sf /usr/libexec/kotinos-recover /usr/bin/kotinos-recover && \
     ln -sf /usr/libexec/kotinos-go-back /usr/bin/kotinos-go-back && \

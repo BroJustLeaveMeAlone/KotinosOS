@@ -58,6 +58,17 @@ snapper --config "${CONFIG_NAME}" set-config \
     ALLOW_GROUPS=wheel \
     SYNC_ACL=yes
 
+# Quota groups, so the machine can answer "how much space are restore points
+# actually using?". Without qgroups btrfs can report a snapshot's apparent size
+# but not its *exclusive* size -- the blocks only that snapshot references, which
+# is the only number that means anything to a user asking why deleting a large
+# file freed nothing. kotinos-space reads this.
+if btrfs quota enable /var >/dev/null 2>&1; then
+    log "enabled btrfs quota groups on /var (for space accounting)"
+else
+    log "WARNING: could not enable quota groups; space reporting will be partial"
+fi
+
 install -d -m 0755 "${STAMP_DIR}"
 printf 'configured=%s\nconfig=%s\n' "$(date -u +%FT%TZ)" "${CONFIG_NAME}" > "${STAMP}"
 

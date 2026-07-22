@@ -57,6 +57,35 @@ else
     passwd --lock "${USERNAME}" >/dev/null
 fi
 
+# Exclude high-churn directories from snapshots.
+#
+# A btrfs subvolume is NOT included in its parent's snapshots, so turning these
+# into subvolumes removes them from version history entirely.
+#
+# This matters more than it looks. Snapshots are cheap because they store only
+# what changed -- but caches and trash change constantly and are worthless to
+# keep old copies of, so without this they would dominate the snapshot budget
+# and push out the versions of real documents that people actually want back.
+#
+# The rule: exclude what is large and reproducible, keep what is small and
+# irreplaceable.
+exclude_from_snapshots() {
+    local dir="$1"
+    [[ -e "${dir}" ]] && rm -rf "${dir}"
+    if btrfs subvolume create "${dir}" >/dev/null 2>&1; then
+        chown "${USERNAME}:${USERNAME}" "${dir}"
+        chmod 0700 "${dir}"
+        log "excluded ${dir} from snapshots (own subvolume)"
+    else
+        # Not fatal: a plain directory still works, it just gets snapshotted.
+        install -d -m 0700 -o "${USERNAME}" -g "${USERNAME}" "${dir}"
+        log "WARNING: could not make ${dir} a subvolume; it will be snapshotted"
+    fi
+}
+
+exclude_from_snapshots "${HOME_DIR}/.cache"
+exclude_from_snapshots "${HOME_DIR}/.local/share/Trash"
+
 if [[ -s "${KEYFILE}" ]]; then
     log "installing authorized_keys for ${USERNAME}"
     install -d -m 0700 -o "${USERNAME}" -g "${USERNAME}" "${HOME_DIR}/.ssh"
