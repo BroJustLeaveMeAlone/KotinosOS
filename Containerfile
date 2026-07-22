@@ -121,6 +121,7 @@ RUN dnf install -y \
         konsole \
         pipewire \
         wireplumber \
+        firefox \
     && dnf clean all
 
 # Restricted settings surface.
@@ -132,6 +133,19 @@ RUN dnf install -y \
 # layer. What is blocked is the set of things that can leave a machine
 # unbootable, unloggable-into, or quietly insecure.
 COPY desktop-config/kotinos-kiosk-restrictions /etc/xdg/kdeglobals
+
+# First-run defaults, applied once per user on first graphical login.
+#
+# Runs as the user rather than root: these are per-user Plasma settings, and
+# writing them as root produces files the user cannot later change -- which
+# looks fine until someone tries to alter their own accent colour.
+COPY system-scripts/kotinos-firstrun.sh /usr/libexec/kotinos-firstrun
+RUN chmod 0755 /usr/libexec/kotinos-firstrun && \
+    install -d /usr/lib/kotinos /etc/xdg/autostart && \
+    printf 'KOTINOS_ACCENT=#0f766e\nKOTINOS_COLOUR_SCHEME=auto\nKOTINOS_BROWSER=firefox\nKOTINOS_SEARCH=duckduckgo\n' \
+      > /usr/lib/kotinos/firstrun.conf && \
+    printf '[Desktop Entry]\nType=Application\nName=KotinosOS first-run setup\nExec=/usr/libexec/kotinos-firstrun\nOnlyShowIn=KDE;\nNoDisplay=true\nX-KDE-autostart-phase=1\n' \
+      > /etc/xdg/autostart/kotinos-firstrun.desktop
 
 # Boot to a graphical session rather than a text console.
 RUN systemctl set-default graphical.target && \
