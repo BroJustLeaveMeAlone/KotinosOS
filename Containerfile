@@ -193,7 +193,12 @@ RUN chmod 0755 /usr/libexec/kotinos-firstrun && \
 # a distro is a respin and, to anyone who is not a developer, indistinguishable
 # from something going wrong. This shows the wreath on a calm field instead, with
 # no text at all.
-RUN dnf install -y plymouth plymouth-system-theme && dnf clean all
+# plymouth-plugin-script is required, not optional: the theme declares
+# ModuleName=script, and without that plugin plymouth does not recognise the
+# theme at all -- `plymouth-set-default-theme kotinos` simply fails. The
+# assertion on the next step is what caught this; without it the image would
+# have built clean and booted to Fedora's default splash.
+RUN dnf install -y plymouth plymouth-system-theme plymouth-plugin-script && dnf clean all
 
 COPY desktop-config/plymouth/kotinos.plymouth /usr/share/plymouth/themes/kotinos/kotinos.plymouth
 COPY desktop-config/plymouth/kotinos.script   /usr/share/plymouth/themes/kotinos/kotinos.script
