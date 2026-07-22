@@ -53,8 +53,9 @@ Full technical detail lives in [`PLAN.md`](./PLAN.md).
 |---|---|
 | `Containerfile` | The OS image definition (pinned to `fedora-bootc:44`). |
 | `disk-layout.toml` | Btrfs partitioning — `@` (root) and `@var` (user data) subvolumes. |
-| `system-scripts/` | Scripts installed into the OS: first-boot provisioning, snapshots, escalation capture, recovery, health check. |
+| `system-scripts/` | Scripts installed into the OS: first-boot provisioning, hardware tuning, snapshots, escalation capture, recovery, health check. |
 | `systemd-units/` | systemd units that run those scripts. |
+| `desktop-config/` | Desktop defaults: settings restrictions, window behaviour, boot splash. |
 | `branding/` | Logo and brand assets. |
 | `build.sh` | Builds the image and converts it to a bootable disk image. |
 | `build-output/` | Generated disk images (not committed). |
@@ -89,7 +90,17 @@ sudo ./build.sh v1 vhd
 | M7 | Distribution | Installer, signing, update channels |
 | M8 | Hardware QA | Supported-hardware matrix, v1.0 |
 
-**M1 is complete** — the image boots, `/var` lives on its own Btrfs subvolume, and the full `v1 → upgrade → v2 → rollback → v1` cycle was verified with user data surviving every transition. Step-by-step progress is tracked in [`TODO.md`](./TODO.md).
+**M1, M1.5 and M2 are complete**, and **M3 is in progress**. Verified on real VMs:
+
+- The image boots — including with **Secure Boot enabled**, inheriting Fedora's signed boot chain, so users are never asked to disable it
+- The full `upgrade → rollback` cycle works with user data surviving every transition
+- Accounts are created on first boot, and survive updates and rollbacks
+- User data is snapshotted on a schedule, and before any privilege escalation
+- **A machine that fails its health checks rolls itself back and reboots, unattended**
+- `rm -rf /*` cannot delete the snapshots — btrfs read-only subvolumes refuse it
+- A KDE Plasma desktop boots to a graphical login
+
+Step-by-step progress, including what is verified versus merely written, is tracked in [`TODO.md`](./TODO.md).
 
 ## License
 
