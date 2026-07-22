@@ -88,6 +88,39 @@ RUN for f in /usr/libexec/kotinos-* /usr/lib/greenboot/check/required.d/50-kotin
       fi; \
     done
 
+# Desktop (M3): KDE Plasma 6 on Wayland.
+#
+# Chosen because the AI sidebar (M6) has to dock over arbitrary windows, which
+# KWin scripting supports and GNOME's extension API does not do reliably; KWin
+# also has the tiling needed for "windows coexist rather than stack"; and
+# Wayland gives the frame pacing that spring-physics motion (M3.5) depends on.
+#
+# A curated package list rather than the `kde-desktop` group, which drags in the
+# whole KDE application suite. This is an appliance: every package here should be
+# something the product actually uses.
+RUN dnf install -y \
+        plasma-desktop \
+        plasma-workspace-wayland \
+        sddm \
+        plasma-nm \
+        plasma-pa \
+        kscreen \
+        xdg-desktop-portal-kde \
+        dolphin \
+        konsole \
+        pipewire \
+        wireplumber \
+    && dnf clean all
+
+# Boot to a graphical session rather than a text console.
+RUN systemctl set-default graphical.target && \
+    systemctl enable sddm.service
+
+# Assert the desktop is actually wired up. Same reasoning as the greenboot
+# assertion above: a silently disabled display manager would ship a black screen.
+RUN systemctl is-enabled sddm.service && \
+    test "$(systemctl get-default)" = "graphical.target"
+
 # Optional development access. Empty in release builds.
 #
 # Fedora bootc places every account's home under /var (/root -> /var/roothome,

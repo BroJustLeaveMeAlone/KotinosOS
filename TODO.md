@@ -21,7 +21,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | **M1** | Foundation — bootable image, subvolumes, rollback proven | ✅ **Complete** (21 Jul 2026) |
 | **M1.5** | First-boot provisioning — create accounts in the live `/var` | ✅ **Complete** (21 Jul 2026) |
 | **M2** | Safety net — snapper, escalation hook, recovery environment | ✅ **Complete** (21 Jul 2026) |
-| M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ⬜ Not started |
+| M3 | Desktop & appliance UX — shell, settings, first-run, hardware | 🚧 **In progress** |
 | M3.5 | Identity & comfort — look, motion, personalization, friction removal | ⬜ Not started |
 | M4 | Sandboxing & hardening | ⬜ Not started |
 | M5 | Admin mode & offline 2FA | ⬜ Not started |
@@ -239,7 +239,43 @@ Steps get written when we begin. Candidates gathered so far:
 
 ---
 
-## Hardware auto-tuning ⬜ NOT STARTED — belongs to M3
+## Milestone 3 — Desktop & appliance UX 🚧 IN PROGRESS
+
+**In plain words:** KotinosOS gets a face. It boots to a desktop, configures the
+hardware without asking, and offers a settings app that cannot break anything.
+
+**Exit criteria:** a fresh image boots to a graphical login, the provisioned user
+reaches a working desktop, hardware is auto-tuned with the decisions logged, and
+the settings surface exposes only what is safe to change.
+
+### Decision: KDE Plasma 6 on Wayland
+
+Chosen for reasons specific to this product, not preference:
+
+- The **AI sidebar must dock over arbitrary windows** (M6). KWin scripting makes
+  that tractable; GNOME's extension API is restrictive and breaks between releases
+- **Windows that coexist rather than stack** — KWin has real tiling built in
+- **Wayland gives proper frame pacing**, which the spring-physics motion depends on
+- Plasma is genuinely themeable, which M3.5 requires
+
+*Testing constraint:* Hyper-V provides a basic framebuffer with no 3D
+acceleration, so we can verify the desktop **works** but cannot judge **animation
+smoothness** in a VM. M3.5's motion work needs real hardware to evaluate.
+
+### Steps
+
+- [ ] Add Plasma to the image — a deliberate minimal set, not the full Fedora KDE spin
+- [ ] Display manager (SDDM) enabled; verify a graphical login appears in Hyper-V
+- [ ] The provisioned user logs in and reaches a working desktop
+- [ ] Watch image size — a desktop roughly doubles it; confirm build and update times stay sane
+- [ ] **Hardware auto-tuning profiler** (detailed below)
+- [ ] First-run experience: account details, accent colour, browser + search choice *(absorbs the item deferred from M1.5)*
+- [ ] Restrict the settings surface to a safe allowlist (Plasma's kiosk framework)
+- [ ] Confirm the safety net still holds with a desktop present: snapshots, escalation capture, greenboot recovery
+
+---
+
+## Hardware auto-tuning — part of M3
 
 **In plain words:** the machine reads its own hardware at first boot and picks
 the best settings for every component, with no questions asked. Pillar 1, and
