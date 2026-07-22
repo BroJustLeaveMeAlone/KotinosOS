@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=KotinosOS
+Description=Olive wreath on a calm background; no scrolling text
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/kotinos
+ScriptFile=/usr/share/plymouth/themes/kotinos/kotinos.script

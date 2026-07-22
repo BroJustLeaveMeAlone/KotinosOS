@@ -147,6 +147,28 @@ RUN chmod 0755 /usr/libexec/kotinos-firstrun && \
     printf '[Desktop Entry]\nType=Application\nName=KotinosOS first-run setup\nExec=/usr/libexec/kotinos-firstrun\nOnlyShowIn=KDE;\nNoDisplay=true\nX-KDE-autostart-phase=1\n' \
       > /etc/xdg/autostart/kotinos-firstrun.desktop
 
+# Boot splash (M3.5).
+#
+# Stock Fedora scrolls kernel messages, which is both the clearest giveaway that
+# a distro is a respin and, to anyone who is not a developer, indistinguishable
+# from something going wrong. This shows the wreath on a calm field instead, with
+# no text at all.
+RUN dnf install -y plymouth plymouth-system-theme && dnf clean all
+
+COPY desktop-config/plymouth/kotinos.plymouth /usr/share/plymouth/themes/kotinos/kotinos.plymouth
+COPY desktop-config/plymouth/kotinos.script   /usr/share/plymouth/themes/kotinos/kotinos.script
+COPY branding/kotinos-logo-transparent.png    /usr/share/plymouth/themes/kotinos/kotinos-logo.png
+
+RUN plymouth-set-default-theme kotinos && \
+    plymouth-set-default-theme | grep -qx kotinos
+
+# Quiet the kernel's own output so the splash is not fighting a wall of text.
+# rhgb hands the console to Plymouth; quiet suppresses non-critical messages.
+# Failures still surface -- this hides routine noise, not problems.
+RUN echo 'GRUB_CMDLINE_LINUX_DEFAULT="rhgb quiet"' > /usr/lib/bootc/kargs.d/10-kotinos-splash.toml 2>/dev/null || \
+    install -d /usr/lib/bootc/kargs.d && \
+    printf 'kargs = ["rhgb", "quiet"]\n' > /usr/lib/bootc/kargs.d/10-kotinos-splash.toml
+
 # Boot to a graphical session rather than a text console.
 RUN systemctl set-default graphical.target && \
     systemctl enable sddm.service

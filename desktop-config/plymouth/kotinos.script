@@ -1,0 +1,77 @@
+# KotinosOS boot splash.
+#
+# The first thing anyone sees. Stock Fedora shows a scrolling wall of kernel
+# messages, which is the single clearest giveaway that a distro is a respin --
+# and it looks like something going wrong even when everything is fine.
+#
+# Design rules here:
+#   - No text. Nothing to read, nothing to worry about.
+#   - The wreath, centred, breathing gently so a slow boot still looks alive.
+#   - Motion is eased, never linear, matching the rest of the system's feel.
+
+# --- background -------------------------------------------------------------
+# A flat, calm field rather than pure black: black reads as "off" or "broken",
+# and this is the moment to look deliberate.
+background.red   = 0.03;
+background.green = 0.09;
+background.blue  = 0.09;
+
+Window.SetBackgroundTopColor(background.red, background.green, background.blue);
+Window.SetBackgroundBottomColor(background.red, background.green, background.blue);
+
+screen_width  = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+# --- the mark ---------------------------------------------------------------
+logo.image  = Image("kotinos-logo.png");
+logo.sprite = Sprite(logo.image);
+
+logo.width  = logo.image.GetWidth();
+logo.height = logo.image.GetHeight();
+logo.x = (screen_width  - logo.width)  / 2;
+logo.y = (screen_height - logo.height) / 2;
+
+logo.sprite.SetX(logo.x);
+logo.sprite.SetY(logo.y);
+logo.sprite.SetZ(10);
+
+# --- breathing --------------------------------------------------------------
+# A slow opacity cycle rather than a spinner. A spinner says "waiting"; this
+# says "running". Sine-based so it eases at both ends instead of pulsing
+# mechanically.
+progress = 0;
+
+fun refresh_callback() {
+    progress++;
+
+    # ~4 second cycle at Plymouth's ~50fps refresh.
+    cycle = Math.Sin(progress / 32) ;
+    opacity = 0.72 + (cycle * 0.28);
+
+    logo.sprite.SetOpacity(opacity);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# --- password prompt --------------------------------------------------------
+# Disk encryption asks here. Kept minimal: a prompt and bullets, no chrome.
+fun display_password_callback(prompt, bullets) {
+    logo.sprite.SetOpacity(1);
+
+    bullet_image = Image("bullet.png");
+    for (i = 0; i < bullets; i++) {
+        bullet[i].sprite = Sprite(bullet_image);
+        bullet[i].sprite.SetX(screen_width / 2 - (bullets * 14) / 2 + i * 14);
+        bullet[i].sprite.SetY(logo.y + logo.height + 48);
+        bullet[i].sprite.SetZ(20);
+    }
+}
+
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+
+# --- shutdown ---------------------------------------------------------------
+fun quit_callback() {
+    logo.sprite.SetOpacity(1);
+}
+
+Plymouth.SetQuitFunction(quit_callback);
