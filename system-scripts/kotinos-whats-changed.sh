@@ -39,26 +39,14 @@ esac
 
 command -v ostree >/dev/null 2>&1 || { echo "ostree unavailable"; exit 1; }
 
-# ostree admin status marks the booted deployment with '*'. The one after it is
-# what we were running before.
-mapfile -t deployments < <(ostree admin status 2>/dev/null | grep -E '^\*?\s*\S+\s+\S+\.[0-9]+$' | awk '{print $NF}')
-booted_line="$(ostree admin status 2>/dev/null | grep -n '^\*' | cut -d: -f1)"
-
-if [[ ${#deployments[@]} -lt 2 ]]; then
-    echo "Nothing to compare — this machine has only ever run one version."
-    echo "That is normal on a new install."
-    exit 0
-fi
-
-current_dir="$(find "${DEPLOY_ROOT}" -maxdepth 1 -name '*.0' -o -maxdepth 1 -name '*.1' 2>/dev/null | head -2 | tail -1)"
-
-# Resolve the two deployment trees by modification time: newest is what we are
-# on, the one before it is what we replaced.
+# Resolve deployment trees by modification time: newest is what we are running,
+# the one before it is what it replaced.
 mapfile -t trees < <(find "${DEPLOY_ROOT}" -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' 2>/dev/null \
                      | sort -rn | awk '{print $2}')
 
 if [[ ${#trees[@]} -lt 2 ]]; then
-    echo "Nothing to compare yet."
+    echo "Nothing to compare — this machine has only ever run one version."
+    echo "That is normal on a new install."
     exit 0
 fi
 
