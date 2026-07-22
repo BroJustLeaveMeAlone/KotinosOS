@@ -188,10 +188,12 @@ COPY desktop-config/kwin-motion /usr/share/kwin/scripts/kotinosmotion
 COPY branding/wallpapers /usr/share/kotinos/wallpapers
 
 COPY system-scripts/kotinos-wallpaper.sh /usr/libexec/kotinos-wallpaper
+COPY system-scripts/kotinos-focus.sh /usr/libexec/kotinos-focus
 COPY systemd-units/kotinos-wallpaper.service /usr/lib/systemd/user/kotinos-wallpaper.service
 COPY systemd-units/kotinos-wallpaper.timer   /usr/lib/systemd/user/kotinos-wallpaper.timer
 
-RUN chmod 0755 /usr/libexec/kotinos-wallpaper && \
+RUN chmod 0755 /usr/libexec/kotinos-wallpaper /usr/libexec/kotinos-focus && \
+    ln -sf /usr/libexec/kotinos-focus /usr/bin/kotinos-focus && \
     test -f /usr/share/kwin/scripts/kotinosmotion/contents/code/main.js && \
     test -f /usr/share/kotinos/wallpapers/kotinos-day.png && \
     systemctl --global enable kotinos-wallpaper.timer
