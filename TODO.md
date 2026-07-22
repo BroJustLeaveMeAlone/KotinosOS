@@ -210,15 +210,26 @@ own phase.
 - [x] Tearing disabled, latency policy medium — on a desktop selling calm, tearing is the most jarring artifact available
 - [x] Effects split by purpose: motion that *explains* (slide, scale, fades) kept; novelty that costs frames (wobbly windows, cube) removed
 - [x] Accent colour and scheduled light/dark applied at first run
-- [ ] **Spring-physics motion — NOT done, and not a config change.** KWin animates on fixed-duration curves. True spring behaviour, where an interrupted animation blends into the next instead of snapping, needs a **custom KWin effect written against its animation API**. That is a development task. What exists today is tuned timing on stock animations, which is *not* the same thing and should not be mistaken for it
+- [x] **One motion language** (`desktop-config/kwin-motion`, a KWin script) — a shared set of durations and curves everything reuses, rather than per-effect settings. Windows arrive over 220 ms on `OutQuint` (fast departure, long settle) and leave in 140 ms, since waiting for something already dismissed is the most irritating animation there is. Menus, tooltips and docks are excluded outright: animating those makes an interface feel laggy even when every individual animation is smooth. Replaces the stock scale effect rather than stacking with it, because two animations on one window read as jitter
+- [ ] **True spring physics — still open, and deliberately not claimed.** What ships is spring-*like easing*: the perceptual signature of spring motion (fast out, long settle, never linear), which is most of the felt difference. Real spring behaviour — a window grabbed mid-flight continuing from its current velocity rather than snapping — cannot be expressed through KWin's scripting API, which animates on fixed duration plus curve. That needs a **C++ KWin effect**
 - [x] **"Go back to yesterday"** (`kotinos-go-back`) — M2 built a working restore engine and gave it no way in. This presents restore points as *"yesterday, 14:30"* and *"before I unlocked admin mode"* rather than numbered subvolumes. A thin wrapper over `kotinos-recover`, so there is still exactly one restore path and it is the tested one. Snapshots the current state first, because undoing the undo has to be possible or nobody risks using it
 - [x] **Silent updates** — bootc stages, applies at next reboot, greenboot health-checks it, a failure rolls back automatically. All three pieces already existed; enabling the timer made them a feature. An update that breaks the machine un-breaks itself before the user notices
 - [x] **"What changed?"** (`kotinos-whats-changed`) — silent must not mean secret. Diffs the running deployment against the previous one and leads with what a person cares about (kernel, graphics, browser, desktop) rather than 400 library names. Ends by naming both undo paths, since "what changed?" is usually asked when something feels wrong
 - [x] **Auto-cleanup with a budget** (`kotinos-cleanup`) — acts only above 80% and stops at 70%. Reclaims in order of least regret: rebuildable caches, then unreferenced images, then oldest routine snapshots. Never touches pre-escalation snapshots or user files. Runs at idle CPU/IO priority, because housekeeping the user can feel defeats the purpose
+- [x] **Time-of-day wallpapers** — four generated from the brand palette (dawn/day/dusk/night), so they match exactly and can be rebuilt at any resolution. The switcher steps aside permanently once the user picks their own: an appliance that overwrites a personal choice every few hours is broken, not helpful. *(First attempt banded visibly — the horizontal term was rounded on its own, and 8 bits per channel cannot hold a smooth ramp over 2160 rows. Fixed with float accumulation plus an ordered dither.)*
+- [x] **Focus mode** (`kotinos-focus`) — silences the whole machine, not one app's notifications. Half-measures are why do-not-disturb is usually distrusted: if one thing still pings, the user keeps half an ear out. Mutes rather than lowers, disables screen dimming, and restores the exact previous values rather than guessing at defaults
 - [ ] Own icon, cursor and sound themes
 - [ ] Curated theme presets
-- [ ] Time-of-day wallpapers
-- [ ] Focus mode; offline-first help
+- [ ] Offline-first help
+
+### M3.5 verification (22 Jul 2026)
+
+**23 checks, 0 failures** against `BUILD_ID=m35` booted with Secure Boot on:
+motion script installed and enabled with the stock effect disabled, all four
+wallpapers present with the switcher correctly resolving *hour 11 → day*, focus
+mode reachable and reporting state, boot splash active, every comfort tool on
+`PATH`, and nothing regressed — desktop, hardware tuner, snapshots, health check
+and Secure Boot all still pass.
 
 ### Remaining candidates
 
