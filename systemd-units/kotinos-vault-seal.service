@@ -1,0 +1,46 @@
+[Unit]
+Description=Keep the vault disconnected
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+# Must run before anything a user could interact with, so the vault is never
+# reachable during a normal session.
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target systemd-user-sessions.service display-manager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# Unmount the vault if the generated mount unit brought it up, then neutralise
+# that unit so it cannot come back.
+#
+# Why this is done by hand rather than with `systemctl mask`:
+#
+# The image builder rejects a partition with no mountpoint, so disk-layout.toml
+# declares /vault, and the builder writes a real unit file to
+# /etc/systemd/system/vault.mount. `systemctl mask` refuses to overwrite an
+# existing file there ("File ... already exists"), so masking silently failed --
+# and the vault only stayed unmounted because the mount itself happened to fail.
+# Right outcome, wrong reason, which is the kind of thing that works until the
+# day it does not.
+#
+# Masking *is* a symlink to /dev/null at the unit's path, so this creates that
+# symlink directly, replacing the builder's file. /etc outranks /run and /usr in
+# systemd's search path, so this is the only location that wins -- `mask
+# --runtime` would be overridden by the very file it is trying to neutralise.
+ExecStart=-/bin/sh -c 'mountpoint -q /vault && umount /vault || true'
+ExecStart=-/bin/sh -c 'ln -sf /dev/null /etc/systemd/system/vault.mount'
+ExecStart=-/usr/bin/systemctl daemon-reload
+ExecStart=-/bin/sh -c 'mountpoint -q /run/kotinos-vault && umount /run/kotinos-vault || true'
+
+# Prove it worked. If the vault is still mounted after all of the above, the
+# protection this whole design rests on is absent, and that must be visible in
+# the journal rather than assumed.
+ExecStart=-/bin/sh -c 'if mountpoint -q /vault; then echo "ERROR: vault is still mounted; it is NOT protected" >&2; else echo "vault sealed"; fi'
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=sysinit.target

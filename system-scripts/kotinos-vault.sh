@@ -252,7 +252,16 @@ do_list() {
 
     for userdir in "${VAULT_MOUNT}"/*; do
         [[ -d "${userdir}" ]] || continue
-        echo "Protected copies for $(basename "${userdir}"):"
+        local base
+        base="$(basename "${userdir}")"
+        # lost+found is an ext4 artefact, not a person; _system holds the app
+        # record rather than anyone's files.
+        [[ "${base}" == "lost+found" ]] && continue
+        if [[ "${base}" == "_system" ]]; then
+            echo "Record of installed apps:"
+        else
+            echo "Protected copies for ${base}:"
+        fi
         find "${userdir}" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' 2>/dev/null | sort -r | while read -r v; do
             local when size
             when="$(date -d "${v:0:8} ${v:9:2}:${v:11:2}" '+%-d %B %Y, %H:%M' 2>/dev/null || echo "${v}")"

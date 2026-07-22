@@ -37,26 +37,31 @@ mountpoint = "/var"
 
 # The vault: a protected copy of the irreplaceable files.
 #
-# A SEPARATE PARTITION, not a subvolume, and deliberately given NO mountpoint.
+# A SEPARATE PARTITION, not a subvolume, and one that stays unmounted.
 #
-# Both of those choices are the feature. Snapshots live inside the same
-# filesystem as the data they protect, so `btrfs subvolume delete` or ransomware
-# running as the user can destroy them. A separate partition with no mountpoint
-# is never attached to the running system at all -- the vault service mounts it,
-# writes, and unmounts, so the window in which anything could reach it is
-# seconds per day rather than always.
+# Both choices are the feature rather than implementation detail. Snapshots live
+# inside the same filesystem as the data they protect, so `btrfs subvolume
+# delete`, or ransomware running as the user, destroys both at once. A partition
+# that is not attached to the running system cannot be encrypted, deleted or
+# corrupted -- the vault service mounts it, writes, and unmounts, so the window
+# in which anything can reach it is seconds a day.
 #
-# You cannot encrypt, delete or corrupt a filesystem that is not mounted.
+# The mountpoint below is declared only because the image builder rejects a
+# partition without one ("invalid partitioning customizations: mountpoint is
+# empty"). It is never used: the Containerfile masks the generated
+# `vault.mount` unit so the partition is not mounted at boot, and the vault
+# service mounts it by label at /run/kotinos-vault when it needs to. The
+# declared path exists to satisfy the schema, nothing more.
 #
 # ext4 rather than btrfs: the vault wants boring and robust, not clever. It
-# needs no snapshots of its own (it stores versioned copies via hardlinks) and
-# ext4 has no copy-on-write fragmentation to worry about.
+# needs no snapshots of its own -- it keeps versions by hardlinking unchanged
+# files between them -- and ext4 has no copy-on-write fragmentation to manage.
 #
-# Size is set at install time to roughly a tenth of the disk. Documents and
-# configs are small, and hardlinking unchanged files between versions means
-# several full versions cost barely more than one.
+# Sized at roughly a tenth of the disk. Documents and settings are small, and
+# hardlinking means several full versions cost barely more than one.
 [[customizations.disk.partitions]]
 type = "plain"
 label = "kotinos-vault"
 fs_type = "ext4"
+mountpoint = "/vault"
 minsize = "8 GiB"

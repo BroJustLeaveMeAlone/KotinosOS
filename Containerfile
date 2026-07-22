@@ -65,6 +65,20 @@ COPY system-scripts/kotinos-apps.sh /usr/libexec/kotinos-apps
 COPY systemd-units/kotinos-vault.service /usr/lib/systemd/system/kotinos-vault.service
 COPY systemd-units/kotinos-vault.timer /usr/lib/systemd/system/kotinos-vault.timer
 COPY desktop-config/vault.conf /etc/kotinos/vault.conf
+
+# Keep the vault partition unmounted.
+#
+# This cannot be done here. The image builder rejects a partition with no
+# mountpoint, so disk-layout.toml declares /vault to satisfy the schema -- and
+# osbuild then runs `systemctl enable vault.mount` while assembling the disk,
+# which fails outright if the unit is already masked in this image.
+#
+# So sealing happens at runtime instead, via kotinos-vault-seal.service. That is
+# the better place regardless: it re-asserts on every boot, so the vault gets
+# re-sealed even if something unmasks or mounts it later.
+COPY systemd-units/kotinos-vault-seal.service /usr/lib/systemd/system/kotinos-vault-seal.service
+RUN systemctl enable kotinos-vault-seal.service && \
+    systemctl is-enabled kotinos-vault-seal.service
 COPY systemd-units/kotinos-cleanup.service /usr/lib/systemd/system/kotinos-cleanup.service
 COPY systemd-units/kotinos-cleanup.timer /usr/lib/systemd/system/kotinos-cleanup.timer
 COPY system-scripts/kotinos-health-check.sh /usr/lib/greenboot/check/required.d/50-kotinos-health.sh

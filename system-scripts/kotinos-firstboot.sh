@@ -71,6 +71,14 @@ fi
 # irreplaceable.
 exclude_from_snapshots() {
     local dir="$1"
+
+    # The parent must exist first: `btrfs subvolume create` does not create
+    # intermediate directories, so a nested path like .local/share/Trash fails
+    # silently on a fresh home where .local/share has not been made yet. That is
+    # exactly what happened -- .cache worked because it sits directly in the
+    # home, Trash did not.
+    install -d -o "${USERNAME}" -g "${USERNAME}" "$(dirname "${dir}")"
+
     [[ -e "${dir}" ]] && rm -rf "${dir}"
     if btrfs subvolume create "${dir}" >/dev/null 2>&1; then
         chown "${USERNAME}:${USERNAME}" "${dir}"
