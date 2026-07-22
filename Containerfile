@@ -68,7 +68,8 @@ RUN chmod 0755 /usr/libexec/kotinos-snapshots \
     ln -sf /usr/libexec/kotinos-go-back /usr/bin/kotinos-go-back && \
     systemctl enable kotinos-snapshots.service && \
     systemctl enable snapper-timeline.timer snapper-cleanup.timer && \
-    systemctl enable greenboot-healthcheck.service
+    systemctl enable greenboot-healthcheck.service && \
+    systemctl enable bootc-fetch-apply-updates.timer
 
 # Enablement must not be silenced. An earlier version of this file enabled a
 # guessed list of greenboot units with `2>/dev/null || true`; the names were
@@ -76,9 +77,23 @@ RUN chmod 0755 /usr/libexec/kotinos-snapshots \
 # shipped with health checking silently disabled. greenboot-healthcheck.service
 # carries Also=greenboot-success.target greenboot-set-rollback-trigger.service,
 # so enabling it pulls in the rest.
+# Silent updates.
+#
+# The three pieces that make unattended updating safe rather than reckless
+# already exist; enabling the timer is what turns them into a feature:
+#   - bootc stages the update and applies it at the next reboot, so nothing is
+#     ever interrupted mid-session
+#   - greenboot health-checks the new deployment on that boot
+#   - a failed check rolls back automatically, verified in M2
+#
+# So an update that breaks the machine un-breaks itself before the user notices.
+# Worth knowing during development: this timer will re-apply :latest and
+# therefore fights *manual* rollback testing, which is why test images disable
+# it by hand.
 RUN systemctl is-enabled greenboot-healthcheck.service && \
     systemctl is-enabled kotinos-snapshots.service && \
-    systemctl is-enabled kotinos-firstboot.service
+    systemctl is-enabled kotinos-firstboot.service && \
+    systemctl is-enabled bootc-fetch-apply-updates.timer
 
 # Reject UTF-8 BOMs in anything executable. Editing on Windows introduces them
 # easily (PowerShell's Set-Content -Encoding utf8 writes one), and a BOM before
