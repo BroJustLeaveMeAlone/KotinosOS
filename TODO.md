@@ -203,10 +203,22 @@ milestone with plumbing it is the first thing cut when the milestone runs long.
 The distro that "looks and feels different" is the whole point, so it gets its
 own phase.
 
-Steps get written when we begin. Candidates gathered so far:
+### Started early (alongside M3, since both touch the same image)
+
+- [x] **Boot splash** — wreath on a calm dark-teal field, no text at all. Breathes on a slow sine cycle rather than showing a spinner: a spinner says *waiting*, breathing says *running*. `rhgb quiet` added so the kernel is not fighting it for the console
+- [x] **Windows coexist** — `ClickRaise=false` and `AutoRaise=false`, so clicking a window focuses it without burying its neighbours. This is the actual mechanism behind "nothing disappears when you click another window"
+- [x] Tearing disabled, latency policy medium — on a desktop selling calm, tearing is the most jarring artifact available
+- [x] Effects split by purpose: motion that *explains* (slide, scale, fades) kept; novelty that costs frames (wobbly windows, cube) removed
+- [x] Accent colour and scheduled light/dark applied at first run
+- [ ] **Spring-physics motion — NOT done, and not a config change.** KWin animates on fixed-duration curves. True spring behaviour, where an interrupted animation blends into the next instead of snapping, needs a **custom KWin effect written against its animation API**. That is a development task. What exists today is tuned timing on stock animations, which is *not* the same thing and should not be mistaken for it
+- [ ] Own icon, cursor and sound themes
+- [ ] Curated theme presets
+- [ ] Time-of-day wallpapers
+
+### Remaining candidates
 
 **Visual identity & motion**
-- Boot splash with the wreath; never scrolling kernel text (needs the SVG logo)
+- SVG logo, needed for the splash at arbitrary resolutions (the PNG is fixed-size)
 - **Spring-based motion system, macOS-grade smoothness.** macOS feels fluid because motion is *physics*, not fixed-duration easing: things decelerate naturally and an interrupted animation blends into the new one instead of snapping. One spring configuration (stiffness/damping) shared by windows, workspaces and the AI sidebar, so everything moves like one system.
   - *Legal note:* the technique is public and widely reimplemented; Apple's protected material is their assets and code. Same physics and restraint, our own artwork — no exposure.
   - Practical requirement: this only looks right if the compositor never drops frames, so vsync and frame pacing come first. Smooth-at-60fps beats elaborate-and-stuttering.
@@ -264,14 +276,15 @@ smoothness** in a VM. M3.5's motion work needs real hardware to evaluate.
 
 ### Steps
 
-- [ ] Add Plasma to the image — a deliberate minimal set, not the full Fedora KDE spin
-- [ ] Display manager (SDDM) enabled; verify a graphical login appears in Hyper-V
-- [ ] The provisioned user logs in and reaches a working desktop
-- [ ] Watch image size — a desktop roughly doubles it; confirm build and update times stay sane
-- [ ] **Hardware auto-tuning profiler** (detailed below)
-- [ ] First-run experience: account details, accent colour, browser + search choice *(absorbs the item deferred from M1.5)*
-- [ ] Restrict the settings surface to a safe allowlist (Plasma's kiosk framework)
-- [ ] Confirm the safety net still holds with a desktop present: snapshots, escalation capture, greenboot recovery
+- [x] Plasma added as a curated package list, not the `kde-desktop` group (which drags in the whole KDE app suite)
+- [x] **SDDM enabled and a graphical login verified running** — `loginctl` shows a greeter session on `seat0`/`tty1`, and a console capture shows the Plasma login screen. Build-time assertions guard that `sddm` is enabled and the default target is `graphical.target`, so a black screen cannot ship silently
+- [x] Image size measured: **2.02 GB → 4.73 GB**. bootc ships only changed layers, so updates stay small; the initial download is what grows
+- [x] Verified the desktop image still boots **with Secure Boot on**, takes its baseline snapshot, and reports HEALTHY
+- [x] **Hardware auto-tuning profiler** written (detailed below)
+- [x] First-run defaults written — accent, light/dark on the clock, browser, search engine
+- [x] Settings surface restricted via Plasma's Kiosk framework
+- [ ] **Not yet verified on a running system:** hardware tuner output, kiosk restrictions, first-run defaults. All three are written and built but need a login to confirm
+- [ ] Graphical first-run *wizard* (asking the questions rather than applying defaults) — still to build
 
 ---
 
