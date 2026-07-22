@@ -1,0 +1,50 @@
+# KotinosOS settings restrictions (KDE Kiosk framework)
+#
+# The privilege model says an ordinary user cannot break the system. That is not
+# achieved by hiding a menu -- Plasma enforces these at the framework level, so
+# a restricted action stays blocked whether it is reached through System
+# Settings, a keyboard shortcut, D-Bus, or a config file the user edited by hand.
+#
+# Installed to /etc/xdg/kdeglobals so it applies to every user. Admin mode (M5)
+# lifts these; this is the everyday surface, not a cage the owner cannot open.
+#
+# What is deliberately still allowed, because it is the promised comfort layer:
+#   networks, Bluetooth, display and dark/light, personalization, basic privacy.
+
+[KDE Action Restrictions][$i]
+
+# --- Cannot damage the running system ---------------------------------------
+# Editing a running session's internals is how a desktop gets broken in ways the
+# user cannot undo and cannot explain.
+action/kwin_rmb=false
+action/start_new_session=false
+action/lock_screen=true
+action/logout=true
+
+# --- Cannot bypass the shell -------------------------------------------------
+# krunner's command execution and "run command" dialogs are a shell by another
+# name. The AI sidebar (M6) becomes the sanctioned way to ask for things, with a
+# policy engine behind it; a raw command box has no such check.
+action/run_command=false
+action/shell_access=false
+
+# --- Cannot rewrite the desktop layout out from under itself -----------------
+# Not because layout is dangerous, but because an appliance that can be
+# accidentally dismantled stops feeling dependable. Curated presets (M3.5) are
+# the supported way to change how it looks.
+action/plasma/allow_configure_when_locked=false
+action/editable_desktop_icons=false
+
+# --- Configuration modules ---------------------------------------------------
+# Everything not listed here remains reachable. These are the modules that can
+# leave a machine unbootable, unloggable-into, or silently insecure.
+[KDE Control Module Restrictions][$i]
+kcm_users=false
+kcm_grub=false
+kcm_bootsplash=false
+kcm_selinux=false
+kcm_firewall=false
+kcm_kerberos=false
+kcm_sddm=false
+kcm_autostart=false
+kcm_filetypes=false

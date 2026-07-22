@@ -123,6 +123,16 @@ RUN dnf install -y \
         wireplumber \
     && dnf clean all
 
+# Restricted settings surface.
+#
+# Enforced by Plasma's Kiosk framework rather than by hiding menu entries, so a
+# blocked action stays blocked whether it is reached through System Settings, a
+# shortcut, D-Bus, or a hand-edited config file. Networks, Bluetooth, display,
+# personalization and privacy stay available -- that is the promised comfort
+# layer. What is blocked is the set of things that can leave a machine
+# unbootable, unloggable-into, or quietly insecure.
+COPY desktop-config/kotinos-kiosk-restrictions /etc/xdg/kdeglobals
+
 # Boot to a graphical session rather than a text console.
 RUN systemctl set-default graphical.target && \
     systemctl enable sddm.service
