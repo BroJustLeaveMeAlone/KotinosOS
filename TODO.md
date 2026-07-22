@@ -218,9 +218,53 @@ own phase.
 - [x] **Auto-cleanup with a budget** (`kotinos-cleanup`) — acts only above 80% and stops at 70%. Reclaims in order of least regret: rebuildable caches, then unreferenced images, then oldest routine snapshots. Never touches pre-escalation snapshots or user files. Runs at idle CPU/IO priority, because housekeeping the user can feel defeats the purpose
 - [x] **Time-of-day wallpapers** — four generated from the brand palette (dawn/day/dusk/night), so they match exactly and can be rebuilt at any resolution. The switcher steps aside permanently once the user picks their own: an appliance that overwrites a personal choice every few hours is broken, not helpful. *(First attempt banded visibly — the horizontal term was rounded on its own, and 8 bits per channel cannot hold a smooth ramp over 2160 rows. Fixed with float accumulation plus an ordered dither.)*
 - [x] **Focus mode** (`kotinos-focus`) — silences the whole machine, not one app's notifications. Half-measures are why do-not-disturb is usually distrusted: if one thing still pings, the user keeps half an ear out. Mutes rather than lowers, disables screen dimming, and restores the exact previous values rather than guessing at defaults
+- [x] **Theme presets** (`kotinos-theme`) — five complete looks, each setting accent, scheme and wallpaper *together*, because those three fight when chosen independently. Includes a high-contrast option kept deliberately plain: an accessibility choice that looks like a compromise does not get picked by the people who need it
+- [x] **SVG logo** — generated procedurally, so leaf count, arc sweep and taper stay adjustable. The splash PNG is now rendered from it at build time, keeping the vector authoritative
 - [ ] Own icon, cursor and sound themes
-- [ ] Curated theme presets
 - [ ] Offline-first help
+
+---
+
+## Signature motion — approved, not yet built
+
+Chosen because each one makes something *true about the product* visible.
+Decoration ages badly and costs frames; motion that communicates state is what
+people remember. **None can be judged in Hyper-V** (no 3D acceleration), so
+these get written and then tuned on real hardware.
+
+- [ ] **Admin-mode ambience** — entering elevated mode subtly cools the palette and draws a thin accent frame; leaving restores it. Not decoration: **people forget they are root**, and that causes destroyed systems. Ambient privilege state is a security feature in an animation's clothes
+- [ ] **Snapshot pulse** — a brief soft ripple at the screen edge when a snapshot is taken. The best feature in the product is currently *invisible*; the machine protects you constantly and you would never know
+- [ ] **Boot-to-login continuity** — the splash wreath transitions into the login avatar rather than cutting. Requires Plymouth and the display manager to agree on a handoff, which is why almost no distro does it. It is the first ten seconds of every session
+- [ ] **Wreath as universal progress indicator** — replaces generic spinners everywhere, drawing itself leaf by leaf. One motif at every size, now that the SVG exists
+- [ ] **Focus-mode vignette** — edges gently darken and notifications visibly fold away, so the state is legible at a glance
+- [ ] **Shake instead of dialogs** — a refused or dangerous action shakes the element rather than opening a modal. Faster, less interrupting, and does not train people to click through warnings
+- [ ] **Tiling flow** — windows travel to new positions on the shared spring curve instead of jumping, so "windows coexist" reads as intentional
+
+---
+
+## Signature features — what only KotinosOS can offer
+
+The point is not more settings. These fall out of infrastructure already built
+(continuous snapshots, an immutable OS, a planned AI with system access), which
+is exactly why they are hard for others to copy.
+
+**From the snapshot engine — already built, only unexposed**
+
+- [ ] **Time-travel any file** — right-click → "earlier versions", for every file, always. Time Machine needs an external disk and setup; we already snapshot `/var` continuously, so **every file on the machine already has history and we simply are not showing it**. Highest value-per-effort item in the project
+- [ ] **"Try it safely"** — flip a switch before installing something sketchy; everything it touches is tracked and one click restores. The nearest existing thing is a VM, which is heavyweight enough that nobody bothers
+- [ ] **Ephemeral guest mode** — hand someone your laptop, everything they do evaporates on logout. Trivial given snapshots; no desktop OS does it cleanly
+- [ ] **Settings undo** — snapshot before each settings change, then offer "undo what I did yesterday" at system level rather than per-app
+
+**Needs the AI (M6)**
+
+- [ ] **"Why is my computer slow?"** — one honest answer from real telemetry, in plain English, with a fix offered. Every OS currently makes you open three tools and interpret graphs
+- [ ] **"What is using my disk / battery / network?"** — one answer, not five utilities
+- [ ] **Ask your files** — the semantic layer *answering* rather than listing: "what did I agree to about the March deadline?" returns the answer with the document cited
+
+**Only possible because the OS is an image**
+
+- [ ] **Portable session** — user state lives in `/var` and the OS is a swappable image, so an environment can move to another KotinosOS machine or be restored onto new hardware in minutes. Nobody offers this because nobody else's OS is separable from its state. Ours already is
+- [ ] **Permission ledger** — plain English: "this app read your Documents 40 times today". A record of what happened, not a toggle
 
 ### M3.5 verification (22 Jul 2026)
 
