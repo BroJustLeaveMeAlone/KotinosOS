@@ -23,7 +23,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | **M2** | Safety net — snapper, escalation hook, recovery environment | ✅ **Complete** (21 Jul 2026) |
 | M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ✅ **Core complete** (22 Jul 2026) — wizard outstanding |
 | M3.5 | Identity & comfort — look, motion, personalization, friction removal | 🚧 **In progress** — splash, windows, comfort features done |
-| M4 | Sandboxing & hardening | ⬜ Not started |
+| M4 | Sandboxing & hardening | 📋 Planned — brief written |
 | M5 | Admin mode & offline 2FA | ⬜ Not started |
 | M6 | AI assistant (+ M6b semantic file layer) | ⬜ Not started |
 | M7 | Distribution infrastructure | ⬜ Not started |
@@ -319,6 +319,55 @@ polish.
   product is complete without it.
 - **Decision to make when we reach it (not now):** which icon theme to fork.
   Deferred until the artwork phase, since it does not affect M4.
+
+---
+
+## Milestone 4 — Sandboxing & hardening 📋 PLANNED (pillar 5)
+
+**In plain words:** make it so a bad app can only hurt itself, and so malware
+can never reach the safety net. Today every app the user runs has the user's
+full reach — one compromised program can read everything they own. M4 puts each
+app in its own box, and puts a wall around the snapshots and the vault.
+
+**Why now:** the safety net exists (M2) and the vault exists (M3.5), so for the
+first time the central promise — *"nothing can delete your safety net"* — is
+something we can actually attack and prove, rather than assert.
+
+**The honest framing this milestone must keep.** Sandboxing is only as strong as
+what each app is allowed to request, SELinux enforcing is not the same as a
+bespoke policy, and no machine is "unhackable". So M4 does not claim security —
+it tests *specific* claims adversarially, the way M1 tested rollback and M2 ran
+`rm -rf /*`. Anything not tested is not counted.
+
+**Exit criteria:**
+- Apps run sandboxed, and a sandboxed app is *demonstrably* confined — one
+  without filesystem permission cannot read `~/.ssh` or Documents.
+- SELinux is enforcing, and a denial is shown actually being blocked.
+- A hostile process running *as the ordinary user* cannot delete snapshots or
+  reach the vault — proven by running one.
+- The firewall is default-deny inbound, and release images expose no unexpected
+  ports.
+
+### Steps
+
+- [ ] **Flatpak app model** — install Flatpak, add a remote (Flathub for now; our own later), default to per-user installs. Verify a real app installs and runs
+- [ ] **Prove the sandbox confines** — a Flatpak without `--filesystem=home` cannot read `~/.ssh` or Documents; grant it and show the difference. Without this test, "sandboxed" is a word, not a fact
+- [ ] **Make "Flatpak-only" real, not just default** — layering system software already requires a deliberate image rebuild on bootc (immutable `/usr`), so ordinary users cannot casually install unsandboxed system packages. Verify and document that this holds; it is a property we inherit and must not accidentally break
+- [ ] **SELinux** — confirm enforcing, add a health-check assertion so a permissive image cannot ship silently, and demonstrate one denial actually enforced. Scope note: targeted policy for our own services where needed, **not** a hand-written MAC framework
+- [ ] **Protect the safety net from the user's own processes** — snapshot and vault management already need root, and the ordinary user only reaches root through password sudo or admin mode (M5). Make that boundary explicit and tested, so a process at the user's own privilege genuinely cannot destroy the snapshots
+- [ ] **Firewall** — `firewalld` default-deny inbound. Confirm no unexpected listening ports in a release image (the dev SSH key and sshd exist only in test builds)
+- [ ] **Kernel / sysctl hardening** — a drop-in for `kptr_restrict`, `dmesg_restrict`, unprivileged BPF and user-namespace limits, checked against what Secure Boot lockdown already enforces so nothing is set twice or fought
+- [ ] **systemd service hardening sweep** — extend the confinement already on the vault and cleanup services (`ProtectSystem`, `PrivateTmp`, capability bounding) across all KotinosOS services
+- [ ] **Attack-surface audit** — enumerate setuid binaries and listening services, remove or justify each. Smaller surface is the cheapest hardening there is
+- [ ] **The adversarial test (the centrepiece)** — run a hostile script *as the ordinary user*, simulating ransomware: try to delete snapshots, reach the vault, read another user's data, disable the safety services. Document exactly what is blocked and what is not, the way the `rm -rf /*` result was documented. This is what turns the security story from claim into evidence
+
+### Dependency to keep in view
+
+The AI (M6) will be given system access, which is a deliberate hole punched
+straight through this sandbox model. Whatever boundaries M4 establishes, M6's
+policy engine has to respect them — the AI must not become the way every
+sandbox is bypassed. Worth building M4's boundaries as things the AI is *also*
+subject to, not just the user.
 
 ---
 
