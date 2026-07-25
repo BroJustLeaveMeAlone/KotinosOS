@@ -57,8 +57,22 @@ mountpoint = "/var"
 # needs no snapshots of its own -- it keeps versions by hardlinking unchanged
 # files between them -- and ext4 has no copy-on-write fragmentation to manage.
 #
-# Sized at roughly a tenth of the disk. Documents and settings are small, and
-# hardlinking means several full versions cost barely more than one.
+# Size: this is a FIXED 8 GiB floor, not a percentage.
+#
+# "Roughly a tenth of the disk, capped" is the intended rule, but it cannot live
+# here: a disk *image* is a fixed-size artifact with no knowledge of the target
+# machine's drive, so a percentage is meaningless at build time. That rule is
+# computed by the installer (M7), which sees the real disk:
+#
+#     vault_size = min(cap, max(8 GiB floor, 10% of target disk))
+#
+# 8 GiB is the correct value here regardless -- it is the minimum a vault should
+# ever be, and it is what direct-image installs (dd to a disk, or a VM) get. The
+# floor also sets the smallest disk KotinosOS supports.
+#
+# Documents and settings are small, and hardlinking unchanged files between
+# versions means several full versions cost barely more than one, so even 8 GiB
+# holds a lot of history.
 [[customizations.disk.partitions]]
 type = "plain"
 label = "kotinos-vault"

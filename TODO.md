@@ -144,13 +144,16 @@ locking us out of the machine — which happened twice during M1.
 
 ## Installing on real machines — notes for M7
 
-**Vault resizing belongs here, not in a separate tool.** Changing the vault
-partition needs everything unmounted, which is exactly what install media
-already provides — and the installer has to implement partitioning regardless,
-so offering "change vault size" there is marginal work rather than a new
-component. A standalone recovery tool for this would duplicate the installer
-badly. Until then the vault is fixed at ~10%, which is generous for documents
-and settings, and it warns at 75% and 90% with the reversible fixes listed.
+**Vault sizing lives here — it cannot live in the image.** A disk image is a
+fixed-size artifact with no knowledge of the target drive, so "10% of the disk"
+is meaningless at build time; the image ships a fixed 8 GiB vault floor. The
+installer, which sees the real disk, computes the actual size:
+`min(cap, max(8 GiB, 10% of disk))`. This is also the only correct place to
+*change* vault size later, since repartitioning needs everything unmounted,
+which install media already provides — and the installer implements partitioning
+regardless, so both sizing and resizing are marginal work rather than a separate
+tool. Until then, direct-image/VM installs use the 8 GiB floor, and the vault
+warns at 75% and 90% with the reversible fixes listed.
 
 Collected early because one item needs testing long before M7 starts.
 
