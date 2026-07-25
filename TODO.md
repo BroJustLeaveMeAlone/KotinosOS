@@ -273,12 +273,23 @@ from the running system except while being written. See `kotinos-vault`,
   creating the parent first.
 - Cosmetic: `lost+found` was listed as though it were a user.
 
-Confirmed working in that first run: the vault partition exists (8 GB ext4,
-labelled), a real backup ran and **unmounted afterward**, the app record wrote
-both a plain-English list and a runnable reinstall script, `.cache` was excluded
-from snapshots, btrfs quotas were on, `kotinos-space` explained usage, all five
-theme presets loaded, and the splash PNG rendered from the SVG. Re-verification
-of the fixes is in progress.
+**Re-verified after the fixes: 27/28 → 27/27, 0 failures.** The vault is now
+sealed for the right reason — `vault.mount` is a symlink to `/dev/null`, an
+explicit `systemctl start vault.mount` is refused (*"Unit vault.mount is
+masked"*), and `/vault` stays unmounted through the attempt. The seal service
+logs *"vault sealed"* after checking its own work. Trash is now its own
+subvolume (`home/kotinos/.local/share/Trash`) alongside `.cache`.
+
+Everything else confirmed on both runs: the 8 GB labelled ext4 partition, a real
+backup that unmounts afterward, the app record as both a plain list and a
+runnable reinstall script, btrfs quotas, `kotinos-space` explaining usage, all
+five theme presets, and the splash rendered from the SVG.
+
+**Infrastructure fix this cost:** builds kept hanging and getting killed from WSL
+starving the Windows host of memory. Capped WSL at 12 GB in `~/.wslconfig`, which
+removed the contention between builds (WSL) and VM tests (Hyper-V) on the same
+32 GB machine. One hung build burned ~2 hours before the cause was found —
+lesson recorded: check log *freshness*, not just whether processes exist.
 
 ## Signature features — what only KotinosOS can offer
 
