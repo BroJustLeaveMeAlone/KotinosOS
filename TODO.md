@@ -250,6 +250,36 @@ these get written and then tuned on real hardware.
 
 ---
 
+## The vault — built and verified (22 Jul 2026)
+
+A protected copy of irreplaceable files on a partition that stays disconnected
+from the running system except while being written. See `kotinos-vault`,
+`kotinos-apps`, and the storage-model scripts.
+
+**First verification: 25/28 passed, and the 3 failures each taught something.**
+
+- **The vault was unmounted for the wrong reason.** `systemctl mask` silently
+  failed because the image builder had already written a real `vault.mount`
+  file and mask will not overwrite one. The partition stayed unmounted only
+  because the mount *attempt* had failed — right outcome, wrong mechanism, which
+  would have broken the moment the mount ever succeeded. Fixed by symlinking the
+  unit to `/dev/null` directly in the seal service, which then checks its own
+  work and logs an error if the vault is still mounted. **Fifth instance of this
+  project's signature bug (something reporting success while doing nothing), and
+  the most dangerous, since the thing failing open was the security boundary.**
+- **The Trash exclusion failed** because `btrfs subvolume create` does not make
+  intermediate directories, and `.local/share` did not exist yet on a fresh
+  home. `.cache` worked only because it sits directly in the home. Fixed by
+  creating the parent first.
+- Cosmetic: `lost+found` was listed as though it were a user.
+
+Confirmed working in that first run: the vault partition exists (8 GB ext4,
+labelled), a real backup ran and **unmounted afterward**, the app record wrote
+both a plain-English list and a runnable reinstall script, `.cache` was excluded
+from snapshots, btrfs quotas were on, `kotinos-space` explained usage, all five
+theme presets loaded, and the splash PNG rendered from the SVG. Re-verification
+of the fixes is in progress.
+
 ## Signature features — what only KotinosOS can offer
 
 The point is not more settings. These fall out of infrastructure already built
