@@ -199,7 +199,12 @@ from Secure Boot, and required before anyone else installs this.
 
 ---
 
-## Milestone 3.5 — Identity & comfort ⬜ NOT STARTED
+## Milestone 3.5 — Identity & comfort 🟢 CORE COMPLETE, polish deferred
+
+Core is built and verified. What remains is gated on real hardware (frame-timed
+motion), artwork (themes), or a later milestone (M5) — not on more code that can
+be checked in a VM. See the sourcing plan below for how each remaining piece
+gets made.
 
 **In plain words:** make KotinosOS look and feel like *itself*, and take work
 away from the user.
@@ -247,6 +252,70 @@ these get written and then tuned on real hardware.
 - [ ] **Focus-mode vignette** — edges gently darken and notifications visibly fold away, so the state is legible at a glance
 - [ ] **Shake instead of dialogs** — a refused or dangerous action shakes the element rather than opening a modal. Faster, less interrupting, and does not train people to click through warnings
 - [ ] **Tiling flow** — windows travel to new positions on the shared spring curve instead of jumping, so "windows coexist" reads as intentional
+
+---
+
+## M3.5 remaining — where each piece comes from
+
+The question this answers: for the parts we cannot finish now, do we *make* them
+or *get* them? Almost all are ours to write. Nothing needs to be bought. The
+only external dependencies are the two asset themes, and those are forked from
+existing open-source work, which is how every distro does it — nobody hand-draws
+three thousand icons.
+
+### 1. We write it — code, no external source
+
+These are the same kind of work as the motion language and wallpaper switcher
+already shipped. They need real hardware to *tune*, not to *build*.
+
+| Piece | What it is | Notes |
+|---|---|---|
+| Spring-physics effect | C++ against KWin's animation API | Start from KWin's own GPL example effects as a skeleton, not from zero |
+| The 7 signature animations | KWin scripts / small effects | Same category as `kwin-motion`; snapshot pulse and admin ambience also need a trigger signal from our services |
+| Wreath progress spinner | Animate the SVG we already have | QML busy-indicator or animated SVG; the vector exists |
+| Animated wallpaper transition | Crossfade between time-of-day wallpapers | Fork Plasma's image-wallpaper QML plugin to add a fade; currently it hard-swaps |
+| Offline-first help | Content we write + a simple viewer | Pure authoring; no dependency at all |
+
+### 2. We fork and rebrand — existing open-source assets
+
+Drawing these from scratch is a multi-month art project no distro undertakes.
+The standard, license-clean path is to fork a permissively-licensed theme and
+recolor it to the wreath teal. **Licenses to confirm at integration**, but the
+usual candidates are GPL-3 / CC-BY-SA, compatible with our GPL-3.
+
+| Piece | Fork candidate | Why | License to verify |
+|---|---|---|---|
+| Icon theme | Papirus, or a `vinceliuice` theme (Tela/Colloid) | Thousands of icons, actively maintained, built to be recolored | GPL-3 |
+| Cursor theme | Bibata | Built from a config by a script, so recoloring to teal is a value change, not a redraw | GPL-3 / OFL |
+
+Rebranding is real work (recolor pipeline, keep attribution and license files),
+but it is *our* build tooling over someone else's shapes — legitimate and normal.
+
+### 3. Could go either way — sound theme
+
+A dozen short sounds: login, notify, error, device plug/unplug.
+
+- **Make:** synthesize them programmatically, the way the wallpapers were
+  generated. Gives an exactly-on-brand set for free, at the cost of them
+  sounding synthesized.
+- **Source:** pull CC0 sounds (public domain, no attribution needed) and curate.
+- **Commission:** a sound designer, if we want a signature audio identity. This
+  is the one place paying money would buy something we cannot make ourselves at
+  the same quality.
+
+Default plan: synthesize a serviceable set now, leave commissioning as optional
+polish.
+
+### What this means
+
+- **Nothing is blocked on a purchase.** Every remaining item can ship for free.
+- **The two theme forks are the only true external dependencies**, and they are
+  forks of open code, not licences we buy.
+- **Optional spending** buys polish, not capability: a commissioned icon set or
+  sound identity would look and sound better than our fork-and-recolor, but the
+  product is complete without it.
+- **Decision to make when we reach it (not now):** which icon theme to fork.
+  Deferred until the artwork phase, since it does not affect M4.
 
 ---
 
