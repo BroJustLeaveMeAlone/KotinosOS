@@ -33,6 +33,11 @@ check "/etc/shadow present"               test -e /etc/shadow
 # The user-data volume must be the real subvolume, not the directory underneath.
 check "/var is a mount point"             mountpoint -q /var
 
+# SELinux must be enforcing (M4). A machine that came up permissive has lost a
+# whole layer of the security model, and a boot is worth failing over it. This
+# also catches an `enforcing=0` kernel argument someone slipped in.
+check "SELinux is enforcing"              bash -c '[[ "$(getenforce 2>/dev/null)" == "Enforcing" ]]'
+
 # The safety net itself. If snapshots are gone there is nothing to recover from,
 # which is worth failing a boot over.
 check "snapshot tree present"             test -d /var/.snapshots

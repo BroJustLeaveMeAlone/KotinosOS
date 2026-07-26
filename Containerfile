@@ -290,6 +290,50 @@ RUN systemctl set-default graphical.target && \
 RUN systemctl is-enabled sddm.service && \
     test "$(systemctl get-default)" = "graphical.target"
 
+# ============================================================================
+# Sandboxing & hardening (M4, pillar 5)
+# ============================================================================
+
+# The app model: Flatpak. Every graphical app runs in a bubblewrap sandbox that
+# declares exactly what it may touch, so a compromised app cannot reach the rest
+# of what the user owns.
+#
+# Flathub is added as the app source for now; a KotinosOS remote comes later.
+# xdg-desktop-portal is what lets a sandboxed app request access (a file, a
+# screenshot) through a broker the user confirms, rather than having it outright.
+RUN dnf install -y flatpak xdg-desktop-portal xdg-desktop-portal-gtk && \
+    dnf clean all && \
+    flatpak remote-add --if-not-exists \
+      flathub https://flathub.org/repo/flathub.flatpakrepo && \
+    flatpak remote-list | grep -q flathub
+
+# Kernel hardening. See the file for why each line, and for the one line
+# deliberately NOT set (unprivileged user namespaces, which Flatpak needs).
+COPY desktop-config/hardening/90-kotinos-sysctl.conf /usr/lib/sysctl.d/90-kotinos-sysctl.conf
+
+# Firewall: default-deny inbound.
+#
+# An appliance should accept no unsolicited connections. Two things here matter:
+#
+#   - Set the default zone explicitly and remove SSH from it. fedora-bootc
+#     inherits a server-flavoured default that leaves SSH open, which for a
+#     desktop appliance is exactly wrong -- a release image should expose
+#     nothing. The dev-access block below re-adds SSH only when a dev key is
+#     baked in, so test images stay reachable while release images stay shut.
+#   - firewall-offline-cmd edits the permanent config while firewalld is stopped,
+#     which is the only thing that works inside a build container.
+RUN dnf install -y firewalld && dnf clean all && \
+    firewall-offline-cmd --set-default-zone=public && \
+    { firewall-offline-cmd --zone=public --remove-service=ssh || true; } && \
+    systemctl enable firewalld.service && \
+    ! firewall-offline-cmd --zone=public --query-service=ssh
+
+# SELinux must be enforcing, and the build must fail if it is not. An image that
+# silently shipped permissive would drop a whole layer of the security model
+# with nothing to show for it -- the same "succeeds while doing nothing" trap
+# this project keeps hitting. fedora-bootc ships enforcing; this asserts it.
+RUN grep -q '^SELINUX=enforcing' /etc/selinux/config
+
 # Optional development access. Empty in release builds.
 #
 # Fedora bootc places every account's home under /var (/root -> /var/roothome,
@@ -312,7 +356,8 @@ RUN if [ -n "${DEV_SSH_KEY}" ]; then \
       chmod 0644 /usr/share/kotinos/ssh/root && \
       install -d -m 0755 /etc/ssh/sshd_config.d && \
       printf 'AuthorizedKeysFile .ssh/authorized_keys /usr/share/kotinos/ssh/%%u\nPermitRootLogin prohibit-password\n' \
-        > /etc/ssh/sshd_config.d/10-kotinos-dev.conf ; \
+        > /etc/ssh/sshd_config.d/10-kotinos-dev.conf && \
+      firewall-offline-cmd --add-service=ssh ; \
     fi
 
 # Fails the build if the result is not a valid bootc image.
