@@ -57,6 +57,7 @@ Full technical detail lives in [`PLAN.md`](./PLAN.md).
 | `systemd-units/` | systemd units that run those scripts. |
 | `desktop-config/` | Desktop defaults: settings restrictions, window behaviour, boot splash. |
 | `branding/` | Logo and brand assets. |
+| `tests/` | Adversarial and audit scripts, run against a booted VM. Deliberately **not** installed into the image — an attack script on every release machine helps only the attacker. |
 | `build.sh` | Builds the image and converts it to a bootable disk image. |
 | `build-output/` | Generated disk images (not committed). |
 | `PLAN.md` | Architecture, milestones, and design decisions. |
@@ -99,6 +100,21 @@ sudo ./build.sh v1 vhd
 - **A machine that fails its health checks rolls itself back and reboots, unattended**
 - `rm -rf /*` cannot delete the snapshots — btrfs read-only subvolumes refuse it
 - A KDE Plasma desktop boots to a graphical login
+- A hostile script run as the ordinary user is stopped at **22 of 22** probed boundaries: it cannot delete or even list the snapshots, mount the vault partition or read its raw block device, rewrite the vault's configuration, read another account's files, stop the safety services, write to `/usr`, or reach root without a password. It *can* encrypt and delete the user's own documents, which is correct — the claim is not that ransomware cannot run, but that the damage stays recoverable
+- A Flatpak without filesystem permission cannot read `~/.ssh` or `Documents`, and can once granted — the same command, the only difference being the permission
+
+That list is the result of an adversarial test, not an audit of intentions, and
+its first run failed. It found eight defects, two of which let an unprivileged
+user attack the safety net directly: any user in `wheel` — which the primary
+account is, so it can `sudo` — could delete every snapshot on the machine with
+no password, and the vault's own configuration file shipped world-writable, so
+it could be edited to quietly exclude the user's documents from backup. The
+safety net was destroyed by an unprivileged process during testing.
+
+Both are fixed and re-proved against the identical attacks, on an image built
+clean afterwards. The details, including what is *not* covered — SELinux ships
+several permissive domains, among them the ones handling SSH authentication —
+are in [`TODO.md`](./TODO.md).
 
 Step-by-step progress, including what is verified versus merely written, is tracked in [`TODO.md`](./TODO.md).
 

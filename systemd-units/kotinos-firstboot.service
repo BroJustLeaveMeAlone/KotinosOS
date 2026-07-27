@@ -18,6 +18,23 @@ ConditionPathExists=!/var/lib/kotinos/.provisioned
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/libexec/kotinos-firstboot
+
+# Confinement. Provisioning creates the user account, so it writes /etc/passwd,
+# /etc/shadow and a home under /var: /etc must stay writable, which is why this
+# is ProtectSystem=true rather than full. /usr and /boot are read-only, and the
+# key material it copies out of /usr is only ever read.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+
+# RestrictSUIDSGID is deliberately NOT set: useradd and the home-directory
+# skeleton set group-sticky bits, and denying that would leave a subtly wrong
+# account rather than an obvious failure.
+
 StandardOutput=journal
 StandardError=journal
 

@@ -11,12 +11,40 @@ After=local-fs.target kotinos-firstboot.service
 # follow provisioning rather than race it.
 Wants=kotinos-firstboot.service
 
-ConditionPathExists=!/var/lib/kotinos/.snapshots-configured
+# Deliberately NOT gated on the stamp file any more.
+#
+# The condition used to be ConditionPathExists=!/var/lib/kotinos/.snapshots-configured,
+# which meant the script never ran again on a provisioned machine. That is fine
+# for a baseline snapshot and wrong for everything else it does: the retention
+# block carries the permissions deciding who may delete snapshots, and when
+# those turned out to let any wheel user wipe the safety net, the corrected
+# settings would never have reached a machine that was already running. The
+# script now re-asserts them every boot and stamps only the baseline snapshot.
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/libexec/kotinos-snapshots
+
+# Confinement. Runs once, as root, to register the snapper config.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# ProtectSystem=true, not full: `snapper create-config` writes the config it
+# creates to /etc/snapper/configs, so /etc has to stay writable here. /usr and
+# /boot are read-only, which is what actually matters.
+#
+# Creating a btrfs subvolume is not a mount, so the .snapshots subvolume this
+# makes is visible system-wide despite PrivateTmp's mount namespace. That is
+# worth stating because the vault-seal unit next door fails for exactly the
+# opposite reason.
+
 StandardOutput=journal
 StandardError=journal
 

@@ -23,8 +23,8 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | **M2** | Safety net — snapper, escalation hook, recovery environment | ✅ **Complete** (21 Jul 2026) |
 | M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ✅ **Core complete** (22 Jul 2026) — wizard outstanding |
 | M3.5 | Identity & comfort — look, motion, personalization, friction removal | 🚧 **In progress** — splash, windows, comfort features done |
-| M4 | Sandboxing & hardening | 📋 Planned — brief written |
-| M5 | Admin mode & offline 2FA | ⬜ Not started |
+| M4 | Sandboxing & hardening | ✅ **Complete** (27 Jul 2026) — all four exit criteria met on a clean image; 22/22 adversarial boundaries hold. Eight defects found and fixed, two of which let an unprivileged user attack the safety net |
+| M5 | Admin mode & offline 2FA | ⬜ Not started — brief not written; holds M4's carried-forward SELinux and audit work |
 | M6 | AI assistant (+ M6b semantic file layer) | ⬜ Not started |
 | M7 | Distribution infrastructure | ⬜ Not started |
 | M8 | Hardware QA & v1.0 | ⬜ Not started |
@@ -322,7 +322,7 @@ polish.
 
 ---
 
-## Milestone 4 — Sandboxing & hardening 📋 PLANNED (pillar 5)
+## Milestone 4 — Sandboxing & hardening ✅ COMPLETE (pillar 5)
 
 **In plain words:** make it so a bad app can only hurt itself, and so malware
 can never reach the safety net. Today every app the user runs has the user's
@@ -340,26 +340,296 @@ it tests *specific* claims adversarially, the way M1 tested rollback and M2 ran
 `rm -rf /*`. Anything not tested is not counted.
 
 **Exit criteria:**
-- Apps run sandboxed, and a sandboxed app is *demonstrably* confined — one
+- ✅ Apps run sandboxed, and a sandboxed app is *demonstrably* confined — one
   without filesystem permission cannot read `~/.ssh` or Documents.
-- SELinux is enforcing, and a denial is shown actually being blocked.
-- A hostile process running *as the ordinary user* cannot delete snapshots or
-  reach the vault — proven by running one.
-- The firewall is default-deny inbound, and release images expose no unexpected
-  ports.
+  *(`tests/sandbox-confinement.sh`, 4/4 on a booted VM.)*
+- ✅ SELinux is enforcing, and a denial is shown actually being blocked.
+  *(`Enforcing` confirmed on the VM and asserted at both build and boot. Real
+  enforced denials observed with `permissive=0` — `plymouthd_t` refused `search`
+  and `init_t` refused `add_name`, both on `unlabeled_t`. See the caveat below:
+  "enforcing" is true globally and is not true of every domain.)*
+- ✅ A hostile process running *as the ordinary user* cannot delete snapshots or
+  reach the vault — proven by running one. *(20/20 boundaries held. It did not
+  hold on the first run: see the snapper finding below, which is the single most
+  valuable thing this milestone produced.)*
+- ✅ The firewall is default-deny inbound, and release images expose no
+  unexpected ports. *(One expected inbound service, `mdns`, kept deliberately
+  and written down. LLMNR was found and removed.)*
 
 ### Steps
 
-- [ ] **Flatpak app model** — install Flatpak, add a remote (Flathub for now; our own later), default to per-user installs. Verify a real app installs and runs
-- [ ] **Prove the sandbox confines** — a Flatpak without `--filesystem=home` cannot read `~/.ssh` or Documents; grant it and show the difference. Without this test, "sandboxed" is a word, not a fact
-- [ ] **Make "Flatpak-only" real, not just default** — layering system software already requires a deliberate image rebuild on bootc (immutable `/usr`), so ordinary users cannot casually install unsandboxed system packages. Verify and document that this holds; it is a property we inherit and must not accidentally break
-- [ ] **SELinux** — confirm enforcing, add a health-check assertion so a permissive image cannot ship silently, and demonstrate one denial actually enforced. Scope note: targeted policy for our own services where needed, **not** a hand-written MAC framework
-- [ ] **Protect the safety net from the user's own processes** — snapshot and vault management already need root, and the ordinary user only reaches root through password sudo or admin mode (M5). Make that boundary explicit and tested, so a process at the user's own privilege genuinely cannot destroy the snapshots
-- [ ] **Firewall** — `firewalld` default-deny inbound. Confirm no unexpected listening ports in a release image (the dev SSH key and sshd exist only in test builds)
-- [ ] **Kernel / sysctl hardening** — a drop-in for `kptr_restrict`, `dmesg_restrict`, unprivileged BPF and user-namespace limits, checked against what Secure Boot lockdown already enforces so nothing is set twice or fought
-- [ ] **systemd service hardening sweep** — extend the confinement already on the vault and cleanup services (`ProtectSystem`, `PrivateTmp`, capability bounding) across all KotinosOS services
-- [ ] **Attack-surface audit** — enumerate setuid binaries and listening services, remove or justify each. Smaller surface is the cheapest hardening there is
-- [ ] **The adversarial test (the centrepiece)** — run a hostile script *as the ordinary user*, simulating ransomware: try to delete snapshots, reach the vault, read another user's data, disable the safety services. Document exactly what is blocked and what is not, the way the `rm -rf /*` result was documented. This is what turns the security story from claim into evidence
+- [x] **Flatpak app model** — installed, with `xdg-desktop-portal` as the broker. The Flathub remote ships as `/etc/flatpak/remotes.d/flathub.flatpakrepo`, not `flatpak remote-add`. Verified on a booted VM, where the timestamps tell the whole story: the remote file is dated image-build time and survived, while `/var/lib/flatpak/repo/config` is dated boot time because the image's `/var` was discarded exactly as `disk-layout.toml` says. Per-user installs now work — a real runtime was installed by an unprivileged user with no polkit prompt
+- [x] **Prove the sandbox confines** — `tests/sandbox-confinement.sh`, 4/4 on the VM. A canary in `~/.ssh` and in `Documents` is invisible to a sandbox without filesystem permission and readable with `--filesystem=home`, the two runs otherwise identical. The denial shows as *"No such file or directory"* rather than *"Permission denied"*, which is the sandbox not merely refusing the read but never mapping the path
+- [x] **Make "Flatpak-only" real, not just default** — confirmed on the VM: `/usr` is read-only (`touch` fails with *Read-only file system*), a system-wide `flatpak install` is refused for an ordinary user by polkit (*"operation Deploy not allowed for user"*), and per-user installs land in the user's own home where they cannot affect anyone else
+- [~] **SELinux** — `Enforcing` confirmed on the booted VM, with a build-time assertion and a boot health-check assertion so a permissive image can neither ship nor boot unnoticed. Still open: demonstrate one denial actually being enforced
+- [x] **Protect the safety net from the user's own processes** — this is where the milestone earned itself. See the snapper finding below: it was **not** protected, and the test proved it by destroying every snapshot on the machine. Now fixed and re-proved against the identical attack
+- [x] **Firewall** — default-deny inbound, SSH genuinely absent from the default zone (it never was before — see findings), both the removal and the dev re-add asserted at build time. A release image's reachable inbound surface is now exactly one service, `mdns`, kept deliberately and documented in the Containerfile. LLMNR was found listening on `0.0.0.0:5355` and removed
+- [x] **Kernel / sysctl hardening** — `90-kotinos-sysctl.conf` covers pointer and log exposure, ptrace scope, unprivileged BPF and runtime kernel loading. Unprivileged user namespaces are deliberately left enabled and documented: Flatpak and bubblewrap build their sandboxes out of exactly that feature. The audit confirmed the payoff from the other side — `bwrap` is **not** setuid on this image, so keeping user namespaces removes a setuid binary rather than adding risk
+- [x] **systemd service hardening sweep** — confinement applied across the KotinosOS services, with every omission carrying its reason. Two are load-bearing: `kotinos-vault-seal.service` gets **no** sandboxing at all, because any sandbox option puts it in a private mount namespace with slave propagation, so its system-wide `umount /vault` would succeed only inside its own view and the journal would print "vault sealed" over a vault that was still mounted and writable. `kotinos-hardware-tune.service` leaves `ProtectKernelTunables` unset, because it would pass today and silently swallow the first setting the service is ever taught to apply live
+- [x] **Attack-surface audit** — `tests/attack-surface.sh`, clean on the VM. 18 setuid binaries, each justified in writing; every listener either loopback, deliberately-open `mdns`, or dev-only `sshd`. Written as a regression guard rather than a one-off: anything new fails the run until someone writes down why it is there. It found two real defects of its own (LLMNR, and world-writable unit files)
+- [x] **The adversarial test (the centrepiece)** — `tests/adversarial-user.sh`, run on a booted VM as the real primary account: **20 boundaries held, 2 allowed by design, 0 wrong.** Deliberately not baked into the image. Its first run was not clean, and that is the point — it found the snapper hole below
+
+### Findings (27 Jul 2026)
+
+Eight defects, every one of them a protection that was written down, looked
+present, and was not there. Two were caught by adding assertions to the build,
+five by running the tests against a real booted machine, and one by systemd
+complaining about a file nobody had looked at.
+
+Two of them — the snapper permissions and the world-writable `vault.conf` — let
+an ordinary user with no password attack the safety net directly. Both are fixed
+and both are now probed by `tests/adversarial-user.sh`, so they fail loudly
+rather than silently if they ever return.
+
+**Final state, verified on `m4c`, an image nobody had touched:** 22 fresh-boot
+checks pass, the adversarial test holds 22 of 22 boundaries with 2 allowed by
+design, the attack-surface audit is clean, and sandbox confinement is 4/4.
+
+#### The one that mattered: an ordinary user could delete every snapshot
+
+`kotinos-snapshots.sh` configured snapper with `ALLOW_GROUPS=wheel` and
+`SYNC_ACL=yes` — presumably so a user could see their own restore points without
+a password. What it actually granted was **full control**, because snapper's
+`ALLOW_GROUPS` is not a read-only permission: it authorises create *and delete*
+over snapperd's D-Bus interface with no polkit prompt at all.
+
+The primary user is in `wheel` so that they can `sudo`. So the primary user —
+and anything running as them — could destroy the entire safety net with one
+command and no authentication. Ransomware's first move, available for free.
+
+This is not a theoretical finding. The adversarial test's first run did it:
+
+```
+dev deleting snapshot 1:   exit=0
+dev deleting snapshot 2:   exit=0
+dev deleting snapshot 3:   exit=0
+=== snapshots AFTER dev's attempt ===
+0 | single | | | root | | | current |          <- nothing left
+```
+
+Every restore point on the machine, gone, by an unprivileged process. The
+central promise of this project — *nothing can delete your safety net* — was
+false, and it was false because of a line we wrote, not because of anything
+btrfs or the kernel did.
+
+With `ALLOW_GROUPS=""` and `SYNC_ACL=no`, the identical attack returns
+`No permissions.` on delete, on create, and on list, and all three snapshots
+survive. Snapshot management now requires root, which means password sudo or
+admin mode (M5) — the boundary M4 said should be there all along.
+
+The uncomfortable part is how long this sat there looking fine. It was written
+during M2, survived the `rm -rf /*` test (which ran as root, where it proves
+nothing about this), and was only ever going to be found by something running as
+the user and actually trying.
+
+#### Home directories were world-readable, undone one line after being set
+
+`useradd` correctly applied `HOME_MODE=0700` from `login.defs`. Then
+`kotinos-firstboot.sh` ran, for `.cache`:
+
+```sh
+install -d -o "$USERNAME" -g "$USERNAME" "$(dirname "$dir")"
+```
+
+For `.cache` the parent *is the home directory*, and `install -d` without `-m`
+does not merely default to 0755 for directories it creates — it **resets the
+mode of one that already exists**. So every account's home was widened back to
+0755 immediately after being correctly locked down, and any local user could
+read any other user's files. Reproduced and fixed:
+
+| step | result |
+|---|---|
+| `useradd` | `drwx------` |
+| old `install -d` (no `-m`) | `drwxr-xr-x` ← the bug |
+| fixed `install -d -m 0700` | `drwx------` |
+
+#### The app model was installed but unreachable
+
+Flatpak was present, the remote was configured, and a user still could not
+install anything. Per-user installs had no source (`flatpak remotes --user` was
+empty, so `install --user` gave *"No remote refs found for 'flathub'"*), and
+system-wide installs are refused for an unprivileged user by polkit
+(*"operation Deploy not allowed for user"*). Both doors shut.
+
+Fixed with `kotinos-flatpak-remote.service`, a **user** unit that registers the
+remote in the user's own installation from the same `.flatpakrepo` file the
+system uses, so there is one source of truth for the URL and GPG key. Verified
+by installing a real runtime as an unprivileged user. Per-user is the right
+default anyway: such an app cannot alter what any other account runs, which is
+the same boundary the rest of M4 rests on.
+
+#### LLMNR was listening on every interface
+
+`systemd-resolved` held `0.0.0.0:5355` on TCP and UDP. LLMNR resolves names DNS
+failed to by shouting them onto the local network and trusting the first reply —
+the mechanism behind a whole family of credential-theft tools, and worth
+nothing to this system. Disabled in `90-kotinos-resolved.conf`; the listener is
+gone. `mdns` (Avahi, 5353) was *kept*, because it is what makes printers and
+network shares appear by themselves, and that is most of what an appliance is
+for. It is now the single reachable inbound service on a release image, recorded
+as a decision rather than an inherited default.
+
+#### Every file the image copies in shipped world-writable — including the vault's config
+
+This started as a cosmetic-looking warning and turned into the second-worst
+finding of the milestone.
+
+`COPY` preserves the source file's mode, and this repo lives on a Windows drvfs
+mount that reports **0777 for every file**. So everything the Containerfile
+copied in shipped as `-rwxrwxrwx`, root-owned: all ten systemd units, the sysctl
+drop-in, the Plymouth theme, the KWin script, and the desktop and vault
+configuration. Eighteen files in total.
+
+For the ones under `/usr` this was invisible, because bootc keeps `/usr`
+read-only — the safety came from the filesystem, not from the files being right.
+But three of them land in **`/etc`, which is writable**. Confirmed on a booted
+machine:
+
+```
+$ su - kotinos -c 'echo COMPROMISED >> /etc/kotinos/vault.conf'
+YES-WROTE-VAULT-CONF
+$ tail -1 /etc/kotinos/vault.conf
+COMPROMISED
+```
+
+`vault.conf` decides what the vault backs up. An ordinary user — or ransomware
+running as them, needing no privilege whatsoever — could append an exclusion for
+their own documents, and the vault would carry on reporting successful backups
+of everything that no longer mattered. A silent attack on the safety net,
+arriving through a filesystem quirk of the *development* machine rather than any
+decision anyone made.
+
+Fixed with one permission sweep and a global assertion — `! find /usr /etc -type
+f -perm /o+w` — so this cannot come back through a file added later, and so a
+world-writable file appearing in the base image also fails the build. Verified
+on a fresh boot: writes are now refused, and the world-writable count across all
+of `/usr` and `/etc` is zero.
+
+Found because `systemd-analyze verify` complains about it on every single run
+and nobody had read the output; the full scope only surfaced once the
+attack-surface audit was taught to look for it. Three probes were added to the
+adversarial test so it is now attacked directly rather than merely audited.
+
+#### The vault result, checked against the trivial-pass trap
+
+Four of the adversarial probes concern the vault, and all four would pass on a
+machine where the vault simply did not exist — the same shape of false comfort
+as the rest of this list. So the vault was exercised directly rather than
+inferred from the probes.
+
+The partition is real (`sda4`, 8 GiB, ext4, `LABEL=kotinos-vault`),
+`vault.mount` is a symlink to `/dev/null`, and nothing is mounted at `/vault`.
+A backup was then run for real while watching from outside the service:
+
+- the service completed (`backup complete`, `status=0/SUCCESS`)
+- the host **never** saw `/run/kotinos-vault` mounted, across 25 checks spanning
+  the whole run
+- afterwards, nothing is mounted and the vault is absent from the host mount
+  table
+
+That confirms the reasoning written into `kotinos-vault.service`: `PrivateTmp`
+gives the service its own mount namespace with slave propagation, so the vault
+is mounted *only inside that service*. The guarantee is not merely "the window
+is a few seconds a day" — during that window the vault is not in any other
+process's view of the filesystem at all.
+
+#### "SELinux is enforcing" is true, and means less than it sounds
+
+The milestone brief warned that enforcing is not the same as a bespoke policy.
+Testing showed exactly how that bites, and it is worth writing down because the
+one-word answer `getenforce` gives is genuinely misleading.
+
+The intended demonstration was to mislabel a user's `authorized_keys` and watch
+sshd refuse it — the failure `kotinos-firstboot.sh`'s `restorecon` exists to
+prevent. It did not refuse. Every label tried, including `unlabeled_t`, still
+logged in. SELinux had in fact detected all of it:
+
+```
+avc: denied { read } comm="sshd-session" name="authorized_keys"
+  scontext=...:sshd_session_t tcontext=...:unlabeled_t permissive=1
+```
+
+`permissive=1` is the whole story. `sshd_session_t` and `sshd_auth_t` are
+**builtin permissive domains** in Fedora's policy — one of roughly thirty,
+alongside `systemd_oomd_t`, `virtqemud_t` and others. The policy knows the
+access is wrong, logs it, and permits it anyway. So on a machine reporting
+`Enforcing`, the domains handling SSH authentication are not confined at all.
+
+Enforced denials do happen and were observed (`plymouthd_t` refused `search`,
+`init_t` refused `add_name`, both `permissive=0`), so the mechanism works and
+the exit criterion is met. But the honest statement of what SELinux buys this
+project today is: *Fedora's targeted policy, enforcing, with a set of upstream
+permissive domains we have not reviewed* — not *every service is confined*.
+Reviewing that list, and deciding which permissive domains matter for an
+appliance, is M5-or-later work. Forcing `sshd_session_t` enforcing without doing
+the policy work would break SSH, which is not a trade worth making blind.
+
+Related, and left as-is deliberately: **`auditd` is not installed.** Denials
+still reach the journal, which is how all of the above was found, so nothing is
+invisible. But there is no persistent audit trail across boots and no
+`ausearch`/`aureport`. That is a reasonable default for an appliance and a poor
+one for a security investigation; noted so the choice is a choice.
+
+#### The two found earlier, at build time
+
+**The firewall was not removing SSH, and said it was.**
+`firewall-offline-cmd` carries a legacy lokkit compatibility layer in which
+`--remove-service` is a lokkit option, so combining it with `--zone=` fails
+outright with *"Can't use lokkit options with other options."* That call was
+wrapped in `|| true`, so it failed on every single build while the build stayed
+green. The default zone kept SSH the whole time — the milestone's headline
+firewall claim was false. Now the zone definition is written directly to
+`/etc/firewalld/zones/public.xml` by filtering the stock file, and the build
+asserts both that the default zone is `public` and that SSH is absent from it.
+The dev-build re-add is asserted too, because the mirror-image failure — a test
+machine nobody can log into — costs an afternoon to diagnose.
+
+**The Flathub remote would not have survived first boot.**
+`flatpak remote-add` writes to `/var/lib/flatpak/repo/config`, and `@var` is its
+own subvolume, which bootc does not seed from the image (the same trap that
+swallowed the image-seeded SSH keys — see `disk-layout.toml`). The build-time
+`flatpak remote-list | grep -q flathub` passed inside the container and would
+have booted to a machine with no app source at all. The remote now ships as
+`/etc/flatpak/remotes.d/flathub.flatpakrepo`, on `@` and image-managed.
+Confirmed in the built image: `flatpak remotes` lists flathub as a system remote
+while `/var/lib/flatpak/repo/config` does not exist at all. Corroborating
+detail — flatpak's own `%post` enables a *boot-time* `flatpak-add-fedora-repos`
+service, because upstream hit this same problem.
+
+**Two things the attack-surface audit found that are worth keeping in view.**
+`bwrap` is *not* setuid on this image: Flatpak builds its sandboxes out of
+unprivileged user namespaces instead. That is the same kernel feature
+`90-kotinos-sysctl.conf` deliberately leaves enabled, so the sandbox costs no
+setuid binary — the reason "disable unprivileged userns" would have been the
+wrong hard line. Separately, `chfn` and `chsh` are setuid root so a user can
+edit their own `/etc/passwd` fields, which an appliance with one account and a
+fixed shell has no real use for. They are recorded as removal candidates rather
+than removed on a hunch, since removing them means touching shadow-utils.
+
+### Finishing touches — carried into M5, not silently dropped
+
+M4 is complete against its exit criteria. Two things are deliberately left open
+rather than counted, and both are carried into M5 (below) because M5 is the
+milestone that owns the privilege and policy layer:
+
+1. **The permissive-domain review.** `getenforce` says `Enforcing`, and that is
+   a global answer to a per-domain question. Forty domains ship permissive,
+   including `sshd_session_t` and `sshd_auth_t`. Not fixed here because forcing
+   them enforcing without policy work breaks SSH, and a broken login is a worse
+   outcome than a documented gap.
+2. **No `auditd`.** Denials reach the journal, so nothing is invisible, but
+   there is no cross-boot audit trail and no `ausearch`/`aureport`.
+
+`tests/attack-surface.sh` now prints the security-relevant permissive domains on
+every run, so this stays visible instead of decaying into a doc nobody re-reads:
+
+```
+  permissive domains: 40 total (upstream defaults)
+  NOT CONFINED despite Enforcing, and security-relevant:
+      sshd_auth_t
+      sshd_session_t
+      systemd_ssh_issue_t
+```
 
 ### Dependency to keep in view
 
@@ -368,6 +638,44 @@ straight through this sandbox model. Whatever boundaries M4 establishes, M6's
 policy engine has to respect them — the AI must not become the way every
 sandbox is bypassed. Worth building M4's boundaries as things the AI is *also*
 subject to, not just the user.
+
+---
+
+## Milestone 5 — Admin mode & offline 2FA ⬜ NOT STARTED (pillar 4)
+
+> The full brief is not written yet. This section currently holds only the work
+> M4 handed forward, so it cannot be lost between milestones. Write the brief
+> before starting, the way M4's was written first.
+
+### Carried forward from M4
+
+- [ ] **Review the permissive SELinux domains** — forty ship permissive, and
+  `sshd_session_t` / `sshd_auth_t` handle SSH authentication, so the domains
+  guarding remote login are not confined on a machine that reports `Enforcing`.
+  Decide per domain which matter for an appliance, and make those enforcing with
+  whatever policy work that needs. This belongs with M5 because it is the same
+  question M5 exists to answer — who is allowed to do what, and how is that
+  boundary actually held rather than merely declared. Proving one of them
+  enforcing afterwards is the test, not the fact that `semanage` accepted the
+  change
+- [ ] **Decide on `auditd`** — currently absent. Denials reach the journal, but
+  there is no cross-boot trail and none of the audit tooling. An appliance that
+  is meant to be recoverable after a compromise probably wants the trail; weigh
+  that against the disk and noise it costs
+- [ ] **`chfn` and `chsh` remain setuid root** — recorded in
+  `tests/attack-surface.sh` as removal candidates. An appliance with one account
+  and a fixed shell has no real use for either, but removing them means touching
+  shadow-utils, which is a deliberate change with its own verification
+
+### The connection worth keeping in view
+
+M4 proved the safety net survives an unprivileged attacker. M5 is where the
+*privileged* path gets built — admin mode is, by design, the thing that can
+delete snapshots and reach the vault. Everything M4 locked down is reachable
+again through it, so the 2FA gate and the policy layer are what stand between
+"the user can recover their machine" and "malware that got one password owns the
+safety net too". The adversarial test should grow a second half that runs
+*after* admin mode is granted.
 
 ---
 

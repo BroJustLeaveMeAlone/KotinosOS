@@ -39,6 +39,28 @@ ExecStart=-/bin/sh -c 'mountpoint -q /run/kotinos-vault && umount /run/kotinos-v
 # the journal rather than assumed.
 ExecStart=-/bin/sh -c 'if mountpoint -q /vault; then echo "ERROR: vault is still mounted; it is NOT protected" >&2; else echo "vault sealed"; fi'
 
+# CONFINEMENT IS DELIBERATELY ABSENT HERE. Do not "harden" this unit.
+#
+# Every systemd sandboxing option -- PrivateTmp, ProtectSystem, ProtectHome,
+# PrivateDevices, ReadOnlyPaths, any of them -- puts the unit in its own mount
+# namespace, and systemd sets that namespace's propagation to slave. Mounts
+# propagate host-to-unit, but never unit-to-host.
+#
+# This unit's entire job is to unmount /vault *for the whole system*. Inside a
+# private namespace that umount would succeed, affect only the unit's own view,
+# and disappear when the unit exits. The vault would stay mounted and writable
+# system-wide, the `mountpoint -q /vault` check below would see it already
+# unmounted in its private view, and the journal would print "vault sealed".
+#
+# That is the worst failure this project has a name for: a green check over an
+# absent protection. The vault is the one thing ransomware must not reach, and
+# adding a line that reads like hardening would be what opens it. It also writes
+# to /etc/systemd/system, which ProtectSystem would block outright.
+#
+# The confinement that matters for this unit is that it runs before
+# systemd-user-sessions and the display manager, so nothing the user controls is
+# running yet when it does its work.
+
 StandardOutput=journal
 StandardError=journal
 

@@ -16,5 +16,32 @@ Nice=19
 IOSchedulingClass=idle
 CPUSchedulingPolicy=idle
 
+# Confinement. This runs as root, unattended, on a timer, and it deletes things
+# -- which is exactly the profile worth boxing in. Everything it writes is under
+# /var, so /usr, /boot and /etc can be read-only to it.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Deliberately NOT set, with reasons -- an option that breaks the service is
+# worse than one that is absent, because the service fails quietly on a timer:
+#
+#   ProtectSystem=strict -- would be tighter, but it needs a ReadWritePaths list
+#     covering everywhere dnf, podman, journald and snapper keep state. That list
+#     would rot silently as their layouts change, and the failure mode is
+#     housekeeping that stops working without anyone noticing.
+#   RestrictNamespaces -- podman builds containers out of namespaces, so denying
+#     them breaks `podman image prune`, one of the three things this reclaims.
+#   ProtectKernelModules -- podman and btrfs may still need a module loaded on a
+#     machine where it is not already in.
+#   ProtectHome -- looks applicable and is not. /home here is a symlink to
+#     /var/home, which ProtectHome does not cover, so it would read as protection
+#     while protecting nothing. This service clears thumbnail and font caches
+#     under /var/home by design.
+
 StandardOutput=journal
 StandardError=journal

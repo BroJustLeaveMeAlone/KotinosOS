@@ -20,6 +20,25 @@ Before=display-manager.service systemd-user-sessions.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/libexec/kotinos-hardware-tune
+
+# Confinement. Reads hardware facts from /sys and writes tuning decisions to
+# /etc, so /etc stays writable (ProtectSystem=true, not full) while /usr and
+# /boot do not.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# ProtectKernelTunables is deliberately NOT set. It would make /proc/sys and
+# /sys read-only, and this is the one service whose whole purpose is kernel
+# tunables. Today it only reads /sys and writes drop-ins to /etc/sysctl.d that
+# take effect on the next boot, so the option would in fact pass -- which is
+# precisely the trap. The first time this service is taught to apply a setting
+# live, the option would start silently swallowing it, and the machine would
+# boot tuned for hardware it does not have.
+
 StandardOutput=journal
 StandardError=journal
 

@@ -21,11 +21,29 @@ IOSchedulingClass=idle
 CPUSchedulingPolicy=idle
 
 # The service handles files it does not own, so limit what else it can reach.
+NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=full
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictRealtime=true
+
+# A consequence of the mount namespace worth stating, because it strengthens the
+# vault's central claim rather than merely tidying the unit:
+#
+# PrivateTmp puts this service in its own mount namespace with slave
+# propagation, so the vault partition it mounts at /run/kotinos-vault is mounted
+# *only inside this service*. No other process on the machine can see that
+# mountpoint, let alone write through it -- not just "the window is seconds a
+# day", but "even during that window the vault is not in anyone else's view of
+# the filesystem". The adversarial test should confirm this rather than take it
+# on faith.
+#
+# RestrictSUIDSGID is deliberately NOT set. The backup runs `rsync -aHAX`, which
+# reproduces setuid and setgid bits faithfully; restricting them would give a
+# vault whose restored files differ from the originals in a way nobody would
+# notice until a restore behaved oddly.
 
 StandardOutput=journal
 StandardError=journal

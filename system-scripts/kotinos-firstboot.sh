@@ -77,7 +77,15 @@ exclude_from_snapshots() {
     # silently on a fresh home where .local/share has not been made yet. That is
     # exactly what happened -- .cache worked because it sits directly in the
     # home, Trash did not.
-    install -d -o "${USERNAME}" -g "${USERNAME}" "$(dirname "${dir}")"
+    #
+    # -m 0700 is load-bearing, not tidiness. For .cache the parent is the HOME
+    # DIRECTORY ITSELF, and `install -d` without -m does not merely default to
+    # 0755 for directories it creates -- it RESETS the mode of one that already
+    # exists. Without -m this line ran immediately after useradd had correctly
+    # applied HOME_MODE=0700 and quietly widened the home back to 0755, so every
+    # account on the machine could read every other account's files. The
+    # adversarial test caught it (27 Jul 2026) by reading another user's home.
+    install -d -m 0700 -o "${USERNAME}" -g "${USERNAME}" "$(dirname "${dir}")"
 
     [[ -e "${dir}" ]] && rm -rf "${dir}"
     if btrfs subvolume create "${dir}" >/dev/null 2>&1; then

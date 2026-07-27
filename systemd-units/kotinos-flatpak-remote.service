@@ -1,0 +1,52 @@
+[Unit]
+Description=Register the app source for this user's Flatpak installation
+Documentation=https://github.com/BroJustLeaveMeAlone/KotinosOS
+
+# A USER unit, not a system one, and that is the whole point.
+#
+# The Flathub remote shipped at /etc/flatpak/remotes.d is a SYSTEM remote, and a
+# system remote is only usable for system-wide installs -- which an unprivileged
+# user cannot perform. Without this unit the result on a booted machine is:
+#
+#     $ flatpak remotes --user          # empty
+#     $ flatpak install --user flathub org.example.App
+#     error: No remote refs found for 'flathub'
+#     $ flatpak install flathub org.example.App
+#     Error: ... operation Deploy not allowed for user
+#
+# So the user could not install an app at all: per-user installs had no source,
+# and system installs need an authorisation they do not have. The app model was
+# installed but not reachable, which the adversarial testing found only because
+# it tried to actually use it (27 Jul 2026).
+#
+# Per-user is the right default rather than a workaround. An app installed into
+# one user's home is confined to that user, needs no privilege to install or
+# remove, and cannot alter what any other account runs -- which is the same
+# boundary the rest of M4 is built on. System-wide installation stays available
+# to an administrator, deliberately gated behind authentication.
+
+ConditionUser=!root
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# --if-not-exists makes this idempotent, so it can run on every login without
+# doing anything after the first.
+#
+# The remote is added from the SAME .flatpakrepo file the system remote uses, so
+# there is one source of truth for the URL and the GPG key. Re-fetching it from
+# the network here would mean a user's app source could differ from the image's,
+# and would need working DNS at login.
+ExecStart=/usr/bin/flatpak remote-add --user --if-not-exists \
+    flathub /etc/flatpak/remotes.d/flathub.flatpakrepo
+
+# Non-fatal on purpose: a user with no network at first login should get a
+# desktop, not a failed unit. The next login retries.
+SuccessExitStatus=0 1
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -302,14 +302,51 @@ RUN systemctl is-enabled sddm.service && \
 # xdg-desktop-portal is what lets a sandboxed app request access (a file, a
 # screenshot) through a broker the user confirms, rather than having it outright.
 RUN dnf install -y flatpak xdg-desktop-portal xdg-desktop-portal-gtk && \
-    dnf clean all && \
-    flatpak remote-add --if-not-exists \
-      flathub https://flathub.org/repo/flathub.flatpakrepo && \
-    flatpak remote-list | grep -q flathub
+    dnf clean all
+
+# The remote is shipped as a file under /etc, NOT added with `flatpak
+# remote-add`, and the difference is the whole point.
+#
+# A system-wide `flatpak remote-add` writes to /var/lib/flatpak/repo/config.
+# @var is its own subvolume, and bootc does not copy the image's /var into it --
+# systemd-tmpfiles creates a bare skeleton instead (see disk-layout.toml). So
+# remote-add would succeed in the build container, `flatpak remote-list` would
+# happily confirm it, and the shipped system would boot with no app source at
+# all: an assertion passing while the thing it asserts does not survive. This is
+# the same trap that swallowed the image-seeded SSH keys.
+#
+# /etc/flatpak/remotes.d is flatpak's own supported drop-in location for
+# preconfigured system remotes, and /etc lives on @ -- image-managed, and
+# three-way merged by bootc on upgrade. The .flatpakrepo file carries the GPG
+# key that signs everything installed from Flathub, so it is fetched from source
+# and checked rather than transcribed; an unsigned or truncated file would mean
+# unverified apps.
+RUN install -d /etc/flatpak/remotes.d && \
+    curl -fsSL -o /etc/flatpak/remotes.d/flathub.flatpakrepo \
+      https://flathub.org/repo/flathub.flatpakrepo && \
+    grep -q '^GPGKey=' /etc/flatpak/remotes.d/flathub.flatpakrepo && \
+    grep -q '^Url=' /etc/flatpak/remotes.d/flathub.flatpakrepo
+
+# Make the app source reachable for PER-USER installs, which is the model the
+# milestone calls for. A system remote alone is not enough: an unprivileged user
+# cannot install into it, and their own installation starts with no remotes at
+# all, so `flatpak install` failed both ways on a booted machine until this
+# existed. See the unit for the exact errors.
+COPY systemd-units/kotinos-flatpak-remote.service \
+     /usr/lib/systemd/user/kotinos-flatpak-remote.service
+RUN systemctl --global enable kotinos-flatpak-remote.service && \
+    test -L /etc/systemd/user/default.target.wants/kotinos-flatpak-remote.service
+
 
 # Kernel hardening. See the file for why each line, and for the one line
 # deliberately NOT set (unprivileged user namespaces, which Flatpak needs).
 COPY desktop-config/hardening/90-kotinos-sysctl.conf /usr/lib/sysctl.d/90-kotinos-sysctl.conf
+
+# Close systemd-resolved's LLMNR listener (0.0.0.0:5355, TCP and UDP), found by
+# the attack-surface audit on a booted machine. See the file for why LLMNR in
+# particular is worth removing rather than merely firewalling.
+COPY desktop-config/hardening/90-kotinos-resolved.conf \
+     /usr/lib/systemd/resolved.conf.d/90-kotinos-resolved.conf
 
 # Firewall: default-deny inbound.
 #
@@ -322,10 +359,51 @@ COPY desktop-config/hardening/90-kotinos-sysctl.conf /usr/lib/sysctl.d/90-kotino
 #     baked in, so test images stay reachable while release images stay shut.
 #   - firewall-offline-cmd edits the permanent config while firewalld is stopped,
 #     which is the only thing that works inside a build container.
+#
+# SSH is removed by writing the zone definition rather than by calling
+# `--remove-service`, and that is not a style preference. firewall-offline-cmd
+# carries a legacy lokkit compatibility layer in which `--remove-service` is a
+# lokkit option, so combining it with `--zone=` fails outright:
+#
+#     usage: see firewall-offline-cmd man page
+#     Can't use lokkit options with other options.
+#
+# That call had been wrapped in `|| true`, so it failed on every build while the
+# build stayed green, and SSH was never actually removed -- the firewall's whole
+# claim was false and nothing said so. Editing the zone file is unambiguous, is
+# reviewable in the image, and cannot half-succeed. /etc/firewalld overrides
+# /usr/lib/firewalld, and the stock definition is filtered rather than retyped so
+# the rest of the zone (dhcpv6-client, forwarding) is inherited, not lost.
+#
+# --set-default-zone stays tolerant because setting the zone to what it already
+# is fails with ZONE_ALREADY_SET (exit 16), which is not an error for us -- we
+# care about the end state, not who got there first. That tolerance is paid for
+# by the assertions below, which are not tolerant: the build fails if the default
+# zone is not public, or if SSH survives in it. Those assertions are the only
+# reason this bug was found rather than shipped.
+#
+# WHAT A RELEASE IMAGE ACTUALLY EXPOSES, since "default-deny inbound" is easy to
+# say and the audit measured something more specific. After this step a release
+# zone holds dhcpv6-client and mdns. Both are kept on purpose:
+#
+#   - dhcpv6-client is how the machine gets an IPv6 address at all.
+#   - mdns is Avahi, and it is what makes printers, network shares and cast
+#     targets appear by themselves. Removing it would make the appliance quieter
+#     on the network and noticeably worse at the thing an appliance is for. It
+#     is the one genuinely reachable inbound service on a release image, and
+#     that is a trade taken with open eyes rather than an oversight.
+#
+# LLMNR, the other multicast listener the audit found, was NOT kept -- see
+# 90-kotinos-resolved.conf. The difference is that mdns buys the user something
+# and LLMNR buys them a credential-theft vector.
 RUN dnf install -y firewalld && dnf clean all && \
-    firewall-offline-cmd --set-default-zone=public && \
-    { firewall-offline-cmd --zone=public --remove-service=ssh || true; } && \
+    { firewall-offline-cmd --set-default-zone=public || true; } && \
+    install -d /etc/firewalld/zones && \
+    grep -v '<service name="ssh"/>' /usr/lib/firewalld/zones/public.xml \
+      > /etc/firewalld/zones/public.xml && \
     systemctl enable firewalld.service && \
+    test "$(firewall-offline-cmd --get-default-zone)" = public && \
+    ! grep -q '<service name="ssh"/>' /etc/firewalld/zones/public.xml && \
     ! firewall-offline-cmd --zone=public --query-service=ssh
 
 # SELinux must be enforcing, and the build must fail if it is not. An image that
@@ -357,8 +435,60 @@ RUN if [ -n "${DEV_SSH_KEY}" ]; then \
       install -d -m 0755 /etc/ssh/sshd_config.d && \
       printf 'AuthorizedKeysFile .ssh/authorized_keys /usr/share/kotinos/ssh/%%u\nPermitRootLogin prohibit-password\n' \
         > /etc/ssh/sshd_config.d/10-kotinos-dev.conf && \
-      firewall-offline-cmd --add-service=ssh ; \
+      firewall-offline-cmd --add-service=ssh && \
+      firewall-offline-cmd --zone=public --query-service=ssh ; \
     fi
+
+# Note the bare --add-service above, with no --zone. That is deliberate: in
+# firewall-offline-cmd, --add-service and --remove-service are lokkit options
+# and cannot be combined with --zone (see the firewall block above, where that
+# collision was silently failing). Bare, lokkit applies them to the default zone,
+# which the block above has already asserted is public -- so the query on the
+# next line confirms the service landed where we think it did. Asserting here
+# matters as much as asserting the removal: a dev image whose SSH re-add failed
+# quietly is a test machine nobody can log into.
+
+# Normalise file permissions, and refuse to build if anything is world-writable.
+#
+# COPY preserves the mode of the source file, and this repo is developed on a
+# Windows drvfs mount that reports EVERY file as 0777. So every file this image
+# copies in shipped as -rwxrwxrwx, root-owned: units, sysctl drop-ins, the
+# Plymouth theme, the KWin script, and the desktop and vault configuration.
+#
+# For the files under /usr this was invisible because bootc keeps /usr
+# read-only. For the ones that land in /etc it was not invisible at all, it was
+# simply never looked at -- /etc IS writable, so an ordinary user could rewrite
+# them. Confirmed on a booted machine (27 Jul 2026): the user appended to
+# /etc/kotinos/vault.conf and /etc/xdg/kwinrc and both writes succeeded.
+#
+# vault.conf is the file that decides what the vault backs up. A user, or
+# ransomware running as them, could quietly add an exclusion for their own
+# documents and the vault would go on reporting successful backups of everything
+# that no longer mattered. That is an attack on the safety net that needs no
+# privilege at all, and it existed because of a filesystem quirk on the
+# development machine rather than any decision anyone made.
+#
+# One sweep with a global assertion, rather than --chmod on each COPY, so a file
+# added later cannot quietly miss it. The assertion covers all of /usr and /etc
+# rather than just our own paths: if the base image ever grows a world-writable
+# file, that is worth failing a build over too.
+RUN find /usr/share/kotinos /usr/lib/kotinos /etc/kotinos \
+         /usr/share/kwin/scripts/kotinosmotion \
+         /usr/share/plymouth/themes/kotinos \
+         -type d -exec chmod 0755 {} + 2>/dev/null; \
+    find /usr/share/kotinos /usr/lib/kotinos /etc/kotinos \
+         /usr/share/kwin/scripts/kotinosmotion \
+         /usr/share/plymouth/themes/kotinos \
+         -type f -exec chmod 0644 {} + 2>/dev/null; \
+    chmod 0644 /usr/lib/systemd/system/kotinos-*.service \
+               /usr/lib/systemd/system/kotinos-*.timer \
+               /usr/lib/systemd/user/kotinos-*.service \
+               /usr/lib/systemd/user/kotinos-*.timer \
+               /usr/lib/sysctl.d/90-kotinos-sysctl.conf \
+               /usr/lib/systemd/resolved.conf.d/90-kotinos-resolved.conf \
+               /etc/xdg/kdeglobals /etc/xdg/kwinrc && \
+    chmod 0755 /usr/libexec/kotinos-* && \
+    ! find /usr /etc -xdev -type f -perm /o+w -print | grep -q .
 
 # Fails the build if the result is not a valid bootc image.
 RUN bootc container lint
