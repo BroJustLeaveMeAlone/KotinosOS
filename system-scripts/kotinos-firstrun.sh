@@ -23,12 +23,49 @@ STAMP="${STATE_DIR}/.firstrun-done"
 
 log() { echo "kotinos-firstrun: $*"; }
 
-[[ -r "${CONF}" ]] && . "${CONF}"
+ACCENT="#0f766e"          # teal, matching the wreath
+COLOUR_SCHEME="auto"
+BROWSER="firefox"
+SEARCH="duckduckgo"
 
-ACCENT="${KOTINOS_ACCENT:-#0f766e}"          # teal, matching the wreath
-COLOUR_SCHEME="${KOTINOS_COLOUR_SCHEME:-auto}"
-BROWSER="${KOTINOS_BROWSER:-firefox}"
-SEARCH="${KOTINOS_SEARCH:-duckduckgo}"
+# Parsed, not sourced, for the same reasons as the vault's config: a stray
+# quote in an answers file should cost that one answer, not abort setup and
+# leave a half-configured desktop. The risk here is smaller than the vault's --
+# this file lives in read-only /usr rather than /etc, so it is not user-writable
+# -- but the failure mode is identical and the parser is six lines.
+#
+# The graphical wizard writes this file, so it is also the boundary between a
+# UI and a shell script. Keeping it inert means the wizard can never emit
+# something that executes, however it is later changed.
+if [[ -r "${CONF}" ]]; then
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        line="${line%%[[:space:]]#*}"
+        [[ "${line}" == \#* || -z "${line}" ]] && continue
+        # Reported as a malformed line rather than falling through to the key
+        # handling, where a line with no '=' turns into a key made of the whole
+        # sentence with its spaces stripped -- a confusing way to say "this is
+        # not a setting".
+        if [[ "${line}" != *=* ]]; then
+            log "ignoring line without a setting in ${CONF}: ${line}"
+            continue
+        fi
+        key="${line%%=*}"
+        value="${line#*=}"
+        key="${key//[[:space:]]/}"
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        [[ "${value}" == \"*\" ]] && value="${value:1:-1}"
+        [[ "${value}" == \'*\' ]] && value="${value:1:-1}"
+        case "${key}" in
+            KOTINOS_ACCENT)        ACCENT="${value}" ;;
+            KOTINOS_COLOUR_SCHEME) COLOUR_SCHEME="${value}" ;;
+            KOTINOS_BROWSER)       BROWSER="${value}" ;;
+            KOTINOS_SEARCH)        SEARCH="${value}" ;;
+            "")                    ;;
+            *) log "ignoring unknown setting '${key}' in ${CONF}" ;;
+        esac
+    done < "${CONF}"
+fi
 
 if [[ -e "${STAMP}" ]]; then
     log "already run for ${USER}; nothing to do"

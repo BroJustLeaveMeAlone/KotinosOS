@@ -39,19 +39,48 @@ esac
 
 command -v ostree >/dev/null 2>&1 || { echo "ostree unavailable"; exit 1; }
 
-# Resolve deployment trees by modification time: newest is what we are running,
-# the one before it is what it replaced.
-mapfile -t trees < <(find "${DEPLOY_ROOT}" -maxdepth 1 -mindepth 1 -type d -printf '%T@ %p\n' 2>/dev/null \
-                     | sort -rn | awk '{print $2}')
+# Ask ostree which deployment is actually booted, rather than assuming the
+# newest directory is the running one.
+#
+# That assumption is wrong in exactly the situation this machine is built for.
+# After `bootc rollback` the BOOTED deployment is the older one, while the newer
+# directory it rolled back from is still on disk and still has the later mtime.
+# Sorting by time would therefore have reported the comparison backwards, telling
+# someone who had just rolled back that they were now running the newer build and
+# describing the update they had deliberately undone as if it had just been
+# applied. Rollback is the feature this whole system is built around, so the one
+# tool that explains what changed cannot be wrong precisely then.
+#
+# `ostree admin status` marks the booted deployment with a leading '*', and the
+# directory under DEPLOY_ROOT is named for the checksum.serial it prints:
+#
+#   * default fca2176c….0        <- booted
+#     default 9b1e44aa….0
+mapfile -t deploy_ids < <(ostree admin status 2>/dev/null \
+    | awk '$1 == "*" { print "booted " $3 } $1 == "default" { print "other " $2 }')
 
-if [[ ${#trees[@]} -lt 2 ]]; then
+booted_id=""
+other_id=""
+for entry in "${deploy_ids[@]}"; do
+    case "${entry}" in
+        booted\ *) booted_id="${entry#booted }" ;;
+        other\ *)  [[ -z "${other_id}" ]] && other_id="${entry#other }" ;;
+    esac
+done
+
+if [[ -z "${booted_id}" || -z "${other_id}" ]]; then
     echo "Nothing to compare — this machine has only ever run one version."
     echo "That is normal on a new install."
     exit 0
 fi
 
-new_tree="${trees[0]}"
-old_tree="${trees[1]}"
+new_tree="${DEPLOY_ROOT}/${booted_id}"
+old_tree="${DEPLOY_ROOT}/${other_id}"
+
+if [[ ! -d "${new_tree}" || ! -d "${old_tree}" ]]; then
+    echo "Cannot locate both deployment trees to compare."
+    exit 1
+fi
 
 read_build_id() {
     local rel="$1/usr/lib/kotinos-release"
