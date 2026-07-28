@@ -20,6 +20,7 @@ SNAPSHOT_ROOT=/var/.snapshots
 MODE=userdata
 TARGET_SNAPSHOT=""
 DRY_RUN=0
+ASSUME_YES=0
 
 usage() {
     cat <<'EOF'
@@ -30,6 +31,7 @@ Usage: kotinos-recover [options]
   --full              restore all of /var, not just user data
                       (intended for a rescue boot, not the running system)
   --dry-run           show what would change, change nothing
+  --yes               skip the confirmation prompt
   -h, --help          this text
 
 Default restores /var/home and /var/roothome -- everything the user owns.
@@ -39,9 +41,19 @@ EOF
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --list)     MODE=list ;;
-        --snapshot) TARGET_SNAPSHOT="${2:-}"; shift ;;
+        --snapshot)
+            # Required, and required to be a number. This value becomes a path
+            # component feeding an `rsync --delete`, so accepting anything else
+            # means accepting a traversal into a directory that is about to be
+            # copied over the user's home.
+            [[ $# -ge 2 ]] || { echo "--snapshot needs a number" >&2; exit 2; }
+            TARGET_SNAPSHOT="$2"
+            [[ "${TARGET_SNAPSHOT}" =~ ^[0-9]+$ ]] || {
+                echo "--snapshot must be a number, not '${TARGET_SNAPSHOT}'" >&2; exit 2; }
+            shift ;;
         --full)     MODE=full ;;
         --dry-run)  DRY_RUN=1 ;;
+        --yes|-y)   ASSUME_YES=1 ;;
         -h|--help)  usage; exit 0 ;;
         *)          echo "unknown option: $1" >&2; usage; exit 2 ;;
     esac
@@ -101,6 +113,28 @@ fi
 log "restoring from snapshot ${TARGET_SNAPSHOT}"
 describe "${TARGET_SNAPSHOT}"
 
+# Confirm before overwriting. Everything below runs `rsync --delete` over live
+# directories, so a mistyped snapshot number or an absent-minded re-run is
+# destructive with no undo of its own -- kotinos-go-back takes a safety snapshot
+# first, but this script can be, and in a rescue boot will be, called directly.
+#
+# --dry-run is exempt because it changes nothing, and a non-interactive caller
+# must pass --yes rather than have consent assumed for it.
+if (( DRY_RUN == 0 && ASSUME_YES == 0 )); then
+    if [[ "${MODE}" == "full" ]]; then
+        log "this will replace ALL of /var from snapshot ${TARGET_SNAPSHOT}"
+    else
+        log "this will replace /var/home and /var/roothome from snapshot ${TARGET_SNAPSHOT}"
+    fi
+    log "anything changed since then is removed; there is no undo from here"
+    if [[ ! -t 0 ]]; then
+        log "ERROR: not interactive and --yes was not given; refusing"
+        exit 1
+    fi
+    read -r -p "Type 'restore' to go ahead, anything else to stop: " answer
+    [[ "${answer}" == "restore" ]] || { log "stopped; nothing was changed"; exit 0; }
+fi
+
 RSYNC_OPTS=(-aAXH --delete --info=stats1)
 [[ ${DRY_RUN} -eq 1 ]] && RSYNC_OPTS+=(--dry-run) && log "DRY RUN -- nothing will change"
 
@@ -111,7 +145,12 @@ restore_path() {
         return 0
     fi
     log "restoring /var/${rel}"
-    install -d "/var/${rel}"
+    # Created restrictively and only when missing. `install -d` without -m
+    # RESETS an existing directory to 0755, which for /var/roothome means root's
+    # home briefly world-readable -- and permanently so if the rsync below then
+    # fails. rsync -a sets the real mode from the snapshot a moment later, so
+    # starting closed and letting it widen is the safe direction to be wrong in.
+    [[ -d "/var/${rel}" ]] || install -d -m 0700 "/var/${rel}"
     rsync "${RSYNC_OPTS[@]}" "${SRC}/${rel}/" "/var/${rel}/"
 }
 

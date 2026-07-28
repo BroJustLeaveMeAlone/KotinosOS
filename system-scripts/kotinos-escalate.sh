@@ -45,11 +45,19 @@ fi
 # Tagged 'important' so it survives ordinary cleanup longer than a routine
 # timeline snapshot.
 if command -v snapper >/dev/null 2>&1; then
-    if snapper --config "${CONFIG_NAME}" create \
+    # --print-number makes snapper report the number it just created, on stdout.
+    # This used to run a second `snapper list --columns number | tail -1` and
+    # take whatever came last, which is only the new snapshot if the listing
+    # happens to be sorted that way and nothing else created one in between.
+    # Asking the command that did the work is both simpler and actually correct,
+    # and this is the pre-escalation record -- the identifier we log here is what
+    # someone reads back when they need to undo whatever admin mode did.
+    if snap_id="$(snapper --config "${CONFIG_NAME}" create \
+            --print-number \
             --description "pre-escalation: ${REASON}" \
             --cleanup-algorithm number \
-            --userdata "kotinos-event=escalation,important=yes" >/dev/null 2>&1; then
-        snap_id="$(snapper --config "${CONFIG_NAME}" list --columns number 2>/dev/null | tail -1 | tr -d ' ')"
+            --userdata "kotinos-event=escalation,important=yes" 2>/dev/null)"; then
+        snap_id="${snap_id//[[:space:]]/}"
         log "created /var snapshot ${snap_id:-?}"
     else
         log "ERROR: failed to snapshot /var"

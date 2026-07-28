@@ -42,7 +42,16 @@ command -v kwriteconfig6 >/dev/null 2>&1 || {
 
 # --- Accent colour ----------------------------------------------------------
 # Plasma wants comma-separated RGB, not hex.
+#
+# Validated first, because $((16#zz)) is a fatal arithmetic error rather than a
+# zero: an accent of "teal" or a truncated "#0f76" would abort here, or write a
+# malformed value into kdeglobals and leave the desktop looking wrong for a
+# reason nobody would connect to a config file.
 hex="${ACCENT#\#}"
+if [[ ! "${hex}" =~ ^[0-9a-fA-F]{6}$ ]]; then
+    log "accent '${ACCENT}' is not a 6-digit hex colour; using the default"
+    hex="0f766e"
+fi
 rgb="$((16#${hex:0:2})),$((16#${hex:2:2})),$((16#${hex:4:2}))"
 kwriteconfig6 --file kdeglobals --group General --key AccentColor "${rgb}"
 kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false

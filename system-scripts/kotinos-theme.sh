@@ -63,10 +63,19 @@ command -v kwriteconfig6 >/dev/null 2>&1 || {
 }
 
 # --- accent -----------------------------------------------------------------
+# Validated before the arithmetic: a malformed hex value in the presets file is
+# a fatal error in $((16#..)), not a zero, so a typo in one preset would take
+# down every theme switch rather than that one colour.
 hex="${accent#\#}"
-rgb="$((16#${hex:0:2})),$((16#${hex:2:2})),$((16#${hex:4:2}))"
-kwriteconfig6 --file kdeglobals --group General --key AccentColor "${rgb}"
-kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
+if [[ ! "${hex}" =~ ^[0-9a-fA-F]{6}$ ]]; then
+    log "look '${wanted}' has an invalid accent '${accent}'; leaving the current one"
+    hex=""
+fi
+if [[ -n "${hex}" ]]; then
+    rgb="$((16#${hex:0:2})),$((16#${hex:2:2})),$((16#${hex:4:2}))"
+    kwriteconfig6 --file kdeglobals --group General --key AccentColor "${rgb}"
+    kwriteconfig6 --file kdeglobals --group General --key accentColorFromWallpaper false
+fi
 
 # --- colour scheme ----------------------------------------------------------
 case "${scheme}" in

@@ -9,6 +9,13 @@ After=local-fs.target
 Type=oneshot
 ExecStart=/usr/libexec/kotinos-vault backup
 
+# A partial backup exits non-zero, so this unit enters the failed state and
+# shows up in `systemctl --failed` rather than passing quietly. That is
+# deliberate: the script used to record success no matter what rsync did, so a
+# full disk produced a green unit and a vault missing the files it claimed to
+# hold. An unattended backup that cannot report failure is not a backup, and the
+# failed state is the only thing anyone will notice without going looking.
+
 # The vault must be unmounted when this finishes, whatever happened. The script
 # unmounts in a trap, and this is the backstop: a vault left mounted after a
 # crashed backup is a vault that is writable until the next reboot, which

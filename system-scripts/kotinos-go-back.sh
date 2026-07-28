@@ -19,14 +19,17 @@ set -uo pipefail
 SNAPSHOT_ROOT=/var/.snapshots
 RECOVER=/usr/libexec/kotinos-recover
 
+ASSUME_YES=0
+
 usage() {
     cat <<'EOF'
-Usage: kotinos-go-back [when]
+Usage: kotinos-go-back [when] [--yes]
 
   kotinos-go-back                 show restore points, newest first
   kotinos-go-back yesterday       restore the newest point from before today
   kotinos-go-back last-safe       restore the last point taken before admin mode
   kotinos-go-back <id>            restore a specific point
+  --yes                           skip the confirmation prompt
 
 Restores your files. It does not touch the operating system -- use
 `bootc rollback` for that, or let the machine do it automatically when a boot
@@ -98,6 +101,17 @@ find_last_safe() {
     return 1
 }
 
+# --yes may appear on either side of the when-argument, so it is pulled out
+# before the case below rather than adding a branch to it.
+args=()
+for arg in "$@"; do
+    case "${arg}" in
+        --yes|-y) ASSUME_YES=1 ;;
+        *)        args+=("${arg}") ;;
+    esac
+done
+set -- "${args[@]+"${args[@]}"}"
+
 target=""
 case "${1:-}" in
     ""|list)     list_points; exit 0 ;;
@@ -119,12 +133,47 @@ echo
 echo "Anything created since then will be lost. The operating system is not affected."
 echo
 
-# Snapshot the current state first. Restoring is itself a destructive act, and
-# "undo the undo" has to be possible or people will not risk using this.
-if command -v snapper >/dev/null 2>&1; then
-    snapper -c var create --description "before restoring to point ${target}" \
-        --cleanup-algorithm number --userdata "kotinos-event=pre-restore" >/dev/null 2>&1 \
-        && echo "Saved where you are now, in case you want to come back."
+# Actually ask. This file's header has always claimed it adds "confirmation",
+# and until now it did not: it printed the warning above and went straight into
+# an rsync --delete over every home directory. A warning nobody can answer is
+# not a confirmation.
+#
+# --yes exists because the settings app and any scripted caller need a way
+# through that is explicit rather than accidental. A non-interactive run with no
+# --yes refuses instead of assuming consent, since the assumption that costs
+# nothing when wrong is the one that does not restore.
+if (( ! ASSUME_YES )); then
+    if [[ ! -t 0 ]]; then
+        echo "Not running interactively and --yes was not given; refusing to restore." >&2
+        exit 1
+    fi
+    read -r -p "Type 'restore' to go ahead, anything else to stop: " answer
+    if [[ "${answer}" != "restore" ]]; then
+        echo "Left everything as it is."
+        exit 0
+    fi
+    echo
 fi
 
-exec "${RECOVER}" --snapshot "${target}"
+# Snapshot the current state first. Restoring is itself a destructive act, and
+# "undo the undo" has to be possible or people will not risk using this.
+#
+# Failing this is fatal rather than cosmetic. It used to be best-effort: if the
+# snapshot failed the restore went ahead anyway, quietly removing the only route
+# back from a decision the user was told they could reverse.
+if command -v snapper >/dev/null 2>&1; then
+    if snapper -c var create --description "before restoring to point ${target}" \
+            --cleanup-algorithm number --userdata "kotinos-event=pre-restore" >/dev/null 2>&1; then
+        echo "Saved where you are now, in case you want to come back."
+    else
+        echo "Could not save where you are now, so this restore would be irreversible." >&2
+        echo "Refusing to continue. Check 'snapper -c var list' and the disk space first." >&2
+        exit 1
+    fi
+else
+    echo "snapper is unavailable, so this restore would be irreversible." >&2
+    echo "Refusing to continue." >&2
+    exit 1
+fi
+
+exec "${RECOVER}" --snapshot "${target}" --yes

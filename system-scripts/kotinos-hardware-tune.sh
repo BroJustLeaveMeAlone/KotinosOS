@@ -46,7 +46,13 @@ cpu_vendor="$(grep -m1 '^vendor_id' /proc/cpuinfo | awk '{print $3}')"
 cpu_model="$(grep -m1 '^model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ *//')"
 cpu_cores="$(nproc)"
 ram_kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
-ram_gb=$(( ram_kb / 1024 / 1024 ))
+
+# Rounded to nearest, not truncated. MemTotal reports usable memory, which is
+# always somewhat under the installed amount because firmware and the kernel
+# reserve some -- so an 8 GiB machine reports about 7.7 and a 16 GiB one about
+# 15.6. Truncating put both a tier below where they belong, quietly giving a
+# 16 GiB desktop the tuning meant for an 8 GiB one.
+ram_gb=$(( (ram_kb + 512 * 1024) / (1024 * 1024) ))
 
 # A battery means a laptop, which changes almost every power decision.
 if [[ -d /sys/class/power_supply ]] && \

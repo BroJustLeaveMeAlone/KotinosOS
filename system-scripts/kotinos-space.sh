@@ -37,8 +37,25 @@ echo
 if command -v btrfs >/dev/null 2>&1; then
     held=0
     count=0
-    while read -r _ id _ _ excl _; do
+    # `btrfs qgroup show --raw` prints four columns:
+    #
+    #   Qgroupid    Referenced    Exclusive   Path
+    #   0/257       2130444288       5079040   @var
+    #   0/262       2122608640      11608064   @var/.snapshots/2/snapshot
+    #
+    # This used to read six fields and take the fifth as Exclusive, so the value
+    # was always empty, every row failed the numeric test, and the whole section
+    # below silently never printed -- the one explanation this script exists to
+    # give. It is only three lines from the top of the file that says so.
+    #
+    # Only snapshot subvolumes are counted. Summing every qgroup would add @ and
+    # @var, which are the live filesystem rather than anything a restore point is
+    # holding, and would have reported nearly the entire disk as held by
+    # snapshots. That would have been a worse bug than printing nothing, so the
+    # field-count fix alone was not enough.
+    while read -r _ _ excl path; do
         [[ "${excl}" =~ ^[0-9]+$ ]] || continue
+        [[ "${path}" == *"/.snapshots/"*"/snapshot" ]] || continue
         held=$(( held + excl ))
         count=$(( count + 1 ))
     done < <(btrfs qgroup show --raw /var 2>/dev/null | tail -n +3)
