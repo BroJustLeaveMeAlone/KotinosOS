@@ -974,6 +974,58 @@ actually returns failure.
 **Still unmeasured:** whether the grant check is fast enough to front every
 polkit query. That one needs a grant check to exist first.
 
+### Decision: the factor (4 Aug 2026)
+
+**TOTP (`pam_oath`) is the factor we build. FIDO2 (`pam_u2f`) is supported for
+people who own a key, and is the stronger of the two.** Both are offline. The
+gate was deliberately designed factor-agnostic, so this decides what gets built
+first rather than locking the architecture.
+
+Everything needed is packaged in Fedora and layerable: `pam_oath` and `oathtool`
+2.6.14, `pam-u2f` 1.4.0, `libfido2` and `fido2-tools` 1.16.0.
+
+**Why not FIDO2 first, despite being stronger.** It asks a person to buy
+hardware before they can administer the computer they already own. For a product
+whose premise is that strangers install it and rely on it, a mandatory
+twenty-five-pound purchase between the user and their own admin mode is not a
+security decision, it is an adoption cliff. TOTP uses the phone they already
+have.
+
+**Where TOTP is genuinely weaker, stated plainly.** With FIDO2 the private key
+never leaves the token, and no filesystem bug can leak it. With TOTP the
+"something you have" is a *shared secret stored on the machine being protected*
+— `pam_oath` keeps it in `/etc/users.oath`. Anyone who can read that file can
+generate valid codes forever, silently, and the user has no way to notice.
+
+That is not hypothetical for this codebase. M4 found every file the image copied
+into `/etc` shipping world-writable, including the vault's config, and an
+ordinary user demonstrably editing one. Had `/etc/users.oath` existed then, the
+second factor would have been readable by any local account. So TOTP is chosen
+with a specific obligation attached: **the secret's protection is part of the
+gate**, gets an assertion at build time and a probe in `tests/`, and is a
+concrete job for the SELinux backstop that the enforcement decision already
+assigned to protecting the grant.
+
+**The clock dependency is real but bounded.** TOTP needs the machine's time to be
+roughly right. This image runs `chronyd`, reports `NTPSynchronized=yes`, and has
+a working RTC (`/dev/rtc0`), so the normal case is fine. The failure case is a
+desktop with a dead RTC battery and no network, which boots with a meaningless
+clock — and the symptom is a user locked out of admin mode on their own machine.
+That is exactly what the recovery codes in the next step are for, which makes
+them a required part of the TOTP design rather than a nicety.
+
+**Testability decided the ordering as much as adoption.** TOTP can be tested end
+to end in the VM today. FIDO2 cannot be tested there at all: no `hidraw` devices,
+no TPM, zero USB devices, and Hyper-V Generation 2 offers no USB passthrough.
+Building the untestable factor first would mean the entire gate — PAM stack,
+grant, expiry, escalation hook — going in unverified behind it, which is how this
+project has repeatedly ended up with green checks over absent protections.
+
+Worth recording so FIDO2 does not get written off as untestable forever:
+`python3-fido2` 2.2.1 ships a software authenticator and `umockdev` 0.19.8 can
+emulate USB HID devices, so a virtual token is plausible with effort. Neither is
+needed to build TOTP, and both are the right thing to reach for when FIDO2 comes.
+
 #### One correction to the starting position
 
 The section above says that today the password alone is root. That is true of the
@@ -1003,23 +1055,28 @@ same flow rather than being bolted on afterwards.
   SELinux protects the grant rather than being the gate. Admin mode is an
   explicit state carrying a timestamped grant, because group membership cannot
   express a mode that has to end
-- [ ] **Disable sudo's authentication cache** — a `timestamp_timeout=0` drop-in,
-  and a probe in `tests/` that fails if it goes missing. This is not tuning: it
-  was measured that a second `sudo` within five minutes takes root *without
-  running the PAM auth stack at all*, so the gate is simply absent for that
-  window. Do this before or with the PAM work, not after, or every later test of
-  the gate will pass for the wrong reason. Check polkit's `auth_admin_keep`
-  retention for the same hole
-- [ ] **Choose the factor** — FIDO2 (`pam_u2f`) or TOTP (`pam_oath`), offline in
-  both cases. FIDO2 is stronger and needs no clock; TOTP needs no hardware but
-  **depends on the machine's time being right**, which on a desktop with a dead
-  RTC battery is a real way to lock someone out of their own computer. Whichever
-  is chosen, the clock dependency is either eliminated or documented and handled
+- [x] **Disable sudo's authentication cache** — done. `timestamp_timeout=0`
+  drop-in at `/etc/sudoers.d/10-kotinos-no-timestamp`, validated with `visudo -c`
+  at build time, with a `tests/attack-surface.sh` section that fails if it is
+  removed, set to a non-zero value, or undercut by a polkit rule returning
+  `auth_admin_keep`. Each of those three guards was tested by breaking the thing
+  it guards
+- [x] **Choose the factor** — decided below: **TOTP first, FIDO2 supported.**
+- [ ] **Protect the TOTP secret at rest** — the obligation the factor decision
+  takes on. `/etc/users.oath` is a shared secret on the machine it defends, so
+  root-only ownership is asserted at build time and probed in `tests/`, and the
+  SELinux backstop confines *which domain* may read it rather than only which
+  user. The test that matters is an ordinary user, and then a confined service,
+  both failing to read it — M4's world-writable finding is what makes this a real
+  requirement rather than a formality
 - [ ] **Enrolment, and the recovery path that has to exist** — an offline second
-  factor with no recovery is a machine one lost key away from being scrap. Print
-  or write recovery codes at enrolment, decide where they live (the vault is
-  tempting and is *unmounted* precisely when needed, so probably not), and test
-  the recovery path by actually losing the token
+  factor with no recovery is a machine one lost key away from being scrap, and
+  with TOTP there are now two ways to get there: a lost phone, and a clock wrong
+  enough that valid codes are rejected. Print or write recovery codes at
+  enrolment, decide where they live (the vault is tempting and is *unmounted*
+  precisely when needed, so probably not), and test the path by actually losing
+  the factor — including the dead-clock case, by setting the clock wrong and
+  confirming recovery still works
 - [ ] **Wire the existing escalation hook in as blocking** — `kotinos-escalate`
   already pins the deployment and snapshots `/var`, and already exits non-zero
   when either fails. M2 built it; M5 is what finally calls it. The gate must
