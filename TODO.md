@@ -24,7 +24,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ✅ **Core complete** (22 Jul 2026) — wizard outstanding |
 | M3.5 | Identity & comfort — look, motion, personalization, friction removal | 🚧 **In progress** — splash, windows, comfort features done |
 | M4 | Sandboxing & hardening | ✅ **Complete** (27 Jul 2026) — all four exit criteria met on a clean image; 22/22 adversarial boundaries hold. Eight defects found and fixed, two of which let an unprivileged user attack the safety net |
-| M5 | Admin mode & offline 2FA | ⬜ Not started — brief not written; holds M4's carried-forward SELinux and audit work |
+| M5 | Admin mode & offline 2FA | 📋 Planned — brief written; enforcement point must be decided before any UI |
 | M6 | AI assistant (+ M6b semantic file layer) | ⬜ Not started |
 | M7 | Distribution infrastructure | ⬜ Not started |
 | M8 | Hardware QA & v1.0 | ⬜ Not started |
@@ -641,11 +641,93 @@ subject to, not just the user.
 
 ---
 
-## Milestone 5 — Admin mode & offline 2FA ⬜ NOT STARTED (pillar 4)
+## Milestone 5 — Admin mode & offline 2FA 📋 PLANNED (pillar 4)
 
-> The full brief is not written yet. This section currently holds only the work
-> M4 handed forward, so it cannot be lost between milestones. Write the brief
-> before starting, the way M4's was written first.
+**In plain words:** the everyday account cannot break the machine, and when the
+user genuinely needs full control they unlock it on purpose — with something
+they physically have, not just something they know — and the machine takes a
+safety copy before the door opens.
+
+**Why now:** M4 proved the ordinary user's boundary holds, 22 probes out of 22.
+M5 builds the one deliberate door through that boundary. Doing it in this order
+matters: a door is only meaningful in a wall that has been tested, and the wall
+was tested last milestone.
+
+**The honest framing this milestone must keep.** `PLAN.md` states the trap
+plainly and it is worth repeating here, because it is the thing most likely to
+go wrong:
+
+> gating a settings *GUI* behind 2FA protects nothing if the user already has a
+> shell. Enforcement has to live at the policy layer — a `polkit` agent or LSM —
+> or it's theater. Decide this before writing UI.
+
+A padlock drawn on a settings window, with `sudo` still working in a terminal
+underneath it, is not a security feature. It is a worse outcome than having no
+admin mode at all, because it invites trust it has not earned. **The enforcement
+point is decided and tested before a single pixel of interface is designed.**
+
+Second piece of honesty, about what a second factor here actually buys. The
+person unlocking admin mode is usually the same person who knows the password,
+so this is not "two people must agree". What it buys is narrower and worth
+stating precisely:
+
+- **malware running as the user cannot escalate silently**, even having captured
+  the password, because it cannot touch the key in someone's pocket;
+- **a borrowed or stolen machine** does not hand over root with a shoulder-surfed
+  password;
+- **the AI in M6 has to pass the same gate as a human**, which is the only reason
+  its "constrained root access" is a boundary rather than a promise.
+
+What it does **not** buy: protection from a user who is talked into approving
+something. Social engineering is outside what this milestone can fix, and
+pretending otherwise would be the same overclaiming M4 spent its time deleting.
+
+**Exit criteria:**
+- A user who **knows the sudo password** but does not have the second factor
+  cannot get root — proven by trying it, in a terminal, not just in the GUI.
+- Unlocking admin mode is preceded by a successful escalation capture, and the
+  door **refuses to open** if that capture fails.
+- Admin mode ends by itself. A session left unlocked relocks without being asked.
+- Losing the token does not brick the machine — there is a tested recovery path.
+- The whole flow works with **no network** and is tested that way.
+
+### Steps
+
+- [ ] **Decide the enforcement point, and write down why** — the PAM stack is the
+  likely answer, since `sudo`, `su`, `polkit` and the display manager all consult
+  it, which makes it the one place a GUI cannot be walked around. An LSM is the
+  heavier alternative. This decision gates everything else in the milestone and
+  must be made first
+- [ ] **Choose the factor** — FIDO2 (`pam_u2f`) or TOTP (`pam_oath`), offline in
+  both cases. FIDO2 is stronger and needs no clock; TOTP needs no hardware but
+  **depends on the machine's time being right**, which on a desktop with a dead
+  RTC battery is a real way to lock someone out of their own computer. Whichever
+  is chosen, the clock dependency is either eliminated or documented and handled
+- [ ] **Enrolment, and the recovery path that has to exist** — an offline second
+  factor with no recovery is a machine one lost key away from being scrap. Print
+  or write recovery codes at enrolment, decide where they live (the vault is
+  tempting and is *unmounted* precisely when needed, so probably not), and test
+  the recovery path by actually losing the token
+- [ ] **Wire the existing escalation hook in as blocking** — `kotinos-escalate`
+  already pins the deployment and snapshots `/var`, and already exits non-zero
+  when either fails. M2 built it; M5 is what finally calls it. The gate must
+  treat a non-zero exit as "do not open the door", which is the behaviour that
+  script's own header has been asking for since it was written
+- [ ] **Time-box the unlocked state** — admin mode that stays open until reboot
+  is admin mode that is always open. Decide the window, relock on idle and on
+  session end, and make the current state visible so nobody is unknowingly root
+- [ ] **Record what admin mode did** — the point of the safety capture is being
+  able to undo a session; that is far easier when there is a log of what
+  happened during it. Ties directly to the `auditd` decision below
+- [ ] **The restricted surface stays restricted** — M3 already limits the settings
+  app via Plasma's Kiosk framework. Verify that the full control panel is
+  genuinely unreachable while locked, rather than merely unlisted
+- [ ] **The adversarial test grows a second half** — `tests/adversarial-user.sh`
+  currently attacks as an ordinary user. Add the case that matters here: an
+  attacker **with the password** and **without the token**, then the same
+  attacker after admin mode is legitimately granted, documenting exactly how much
+  the safety net still resists. M4's answer was "everything held"; M5's answer
+  will honestly be "less", and the number is worth knowing
 
 ### Carried forward from M4
 
@@ -674,8 +756,21 @@ M4 proved the safety net survives an unprivileged attacker. M5 is where the
 delete snapshots and reach the vault. Everything M4 locked down is reachable
 again through it, so the 2FA gate and the policy layer are what stand between
 "the user can recover their machine" and "malware that got one password owns the
-safety net too". The adversarial test should grow a second half that runs
-*after* admin mode is granted.
+safety net too".
+
+### Dependency to keep in view
+
+M6 gives the AI system access, and `PLAN.md` is blunt that because the ordinary
+user is near-powerless by design, **the AI becomes the main escalation path** —
+which makes its policy engine the security boundary of the whole product.
+
+That lands squarely on this milestone. If admin mode is a gate a human passes
+and the AI has some quieter way around, then the gate protects nothing that
+matters and the AI is simply the new way to reach root. So M5 should be built on
+the assumption that M6's policy engine is another *caller* of the same gate, not
+a peer of it — and the enforcement point chosen in the first step above has to
+be one an in-process AI agent cannot bypass. Choosing a GUI-level gate would
+fail this test immediately, which is a second reason the first step is first.
 
 ---
 
