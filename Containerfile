@@ -607,12 +607,57 @@ RUN dnf install -y pam_oath oathtool && dnf clean all && \
     test "$(matchpathcon -n /etc/kotinos/recovery-codes | tr -d ' ')" = "system_u:object_r:shadow_t:s0" && \
     test "$(stat -c '%a %U %G' /etc/users.oath)" = "600 root root"
 
-# The enrolment tool. Sets up the factor and can check a code; it deliberately
-# does not grant admin mode -- that is the next part of M5.
+# Admin mode: the tool, and the gate PAM consults.
 COPY system-scripts/kotinos-admin.sh /usr/libexec/kotinos-admin
-RUN chmod 0755 /usr/libexec/kotinos-admin && \
+COPY system-scripts/kotinos-admin-gate.sh /usr/libexec/kotinos-admin-gate
+RUN chmod 0755 /usr/libexec/kotinos-admin /usr/libexec/kotinos-admin-gate && \
     ln -sf /usr/libexec/kotinos-admin /usr/bin/kotinos-admin && \
     /usr/libexec/kotinos-admin --help >/dev/null
+
+# Put the gate in front of sudo.
+#
+# This is the milestone's headline claim made mechanical: a user who knows the
+# password but has no unlocked admin mode gets nothing. `requisite` ends the
+# attempt at the gate rather than after collecting a password that could not
+# have worked.
+#
+# The drop-in is prepended to /etc/pam.d/sudo rather than written as a separate
+# file because PAM has no include-before mechanism -- order within the stack is
+# the semantics, and the gate has to run first.
+#
+# THE BOOTSTRAP, which is the part that needs stating. Gating sudo raises an
+# obvious problem: opening admin mode needs root, and root now needs admin mode.
+# It is resolved by the sudoers rule below rather than by an exception inside
+# the gate, because NOPASSWD makes sudo skip its PAM auth stack altogether --
+# verified on a booted machine, where a NOPASSWD command ran the stack zero
+# times. So the unlock helper is reachable without a grant, and nothing else is.
+#
+# NOPASSWD does not mean unauthenticated. The helper demands the account's
+# password (through unix_chkpwd, the same helper PAM uses) and then the second
+# factor, so the two factors are both still required -- they are just checked by
+# the thing that opens the door rather than by sudo on the way to it.
+# `seteuid` is load-bearing, not decoration. Without it pam_exec runs the helper
+# as the INVOKING user, who cannot read the 0600 root-owned grant file -- so the
+# gate refused every time, including with a perfectly valid grant, and the
+# failure looked like a PAM bug rather than a permissions one. With it the
+# helper runs as root and can actually answer the question it was asked.
+#
+# Worth recording for the next person reading a failure here: sudo renders any
+# failed auth module as "PAM authentication error: Unknown error -1", which
+# reads like something broken. It is not. `pam_exec /bin/false` produces exactly
+# the same message, because that message IS the refusal.
+RUN install -d /usr/share/kotinos && \
+    cp /etc/pam.d/sudo /usr/share/kotinos/sudo.pam.orig && \
+    printf '# KotinosOS admin-mode gate. Must stay first: see kotinos-admin-gate.\nauth       requisite    pam_exec.so seteuid quiet /usr/libexec/kotinos-admin-gate\n' \
+      > /tmp/sudo.pam.new && \
+    cat /etc/pam.d/sudo >> /tmp/sudo.pam.new && \
+    cat /tmp/sudo.pam.new > /etc/pam.d/sudo && \
+    rm -f /tmp/sudo.pam.new && \
+    head -2 /etc/pam.d/sudo | grep -q 'kotinos-admin-gate' && \
+    printf '# The one command that can open admin mode, and therefore the one that\n# cannot require it. NOPASSWD makes sudo skip its PAM stack, which is what\n# lets this bypass the gate; the helper itself demands password and factor.\n%%wheel ALL=(root) NOPASSWD: /usr/libexec/kotinos-admin unlock, /usr/libexec/kotinos-admin unlock *\n' \
+      > /etc/sudoers.d/20-kotinos-admin-unlock && \
+    chmod 0440 /etc/sudoers.d/20-kotinos-admin-unlock && \
+    visudo -c -q
 
 # Optional development access. Empty in release builds.
 #

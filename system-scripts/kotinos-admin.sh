@@ -302,8 +302,23 @@ do_check() {
     exit 1
 }
 
+# The password half of the two factors.
+#
+# unix_chkpwd is the helper PAM itself uses, so this asks the same question the
+# rest of the system asks rather than re-implementing shadow parsing. It reads a
+# NUL-terminated password on stdin and its exit status is the answer. Notably it
+# refuses everything for a locked account, which is the state a freshly
+# provisioned machine is in -- so admin mode cannot be unlocked before the user
+# has a password at all, which is the correct direction to fail.
+verify_password() {
+    local user="$1" pw="$2"
+    [[ -n "${pw}" ]] || return 1
+    printf '%s\0' "${pw}" | /usr/bin/unix_chkpwd "${user}" nullok >/dev/null 2>&1
+}
+
 do_unlock() {
     need_root
+    # When invoked through sudo the caller is who matters, not root.
     local user; user="$(target_user "${1:-}")" || exit 1
 
     grep -qE "^[A-Z0-9/]+[[:space:]]+${user}[[:space:]]" "${OATH_FILE}" 2>/dev/null || {
@@ -311,14 +326,29 @@ do_unlock() {
         exit 1
     }
 
-    local code="${2:-}"
-    if [[ -z "${code}" ]]; then
-        read -r -p "Code from your authenticator (or a recovery code): " code
+    # Both factors. Read from stdin when not interactive so this can be driven
+    # by a test or a settings app -- password on the first line, code on the
+    # second -- rather than passed as arguments, which would put both in the
+    # process table for anyone running ps.
+    local password code
+    if [[ -t 0 ]]; then
+        read -r -s -p "Password for ${user}: " password; echo
+        read -r    -p "Code from your authenticator (or a recovery code): " code
+    else
+        read -r password
+        read -r code
     fi
-    [[ -n "${code}" ]] || { log "no code given"; exit 1; }
 
+    # Password first, and the failure message is the same for both factors:
+    # saying which half was wrong tells an attacker which half they already have.
+    if ! verify_password "${user}" "${password}"; then
+        log "authentication failed"
+        exit 1
+    fi
+
+    [[ -n "${code}" ]] || { log "authentication failed"; exit 1; }
     if ! verify_totp "${user}" "${code}" && ! verify_recovery "${user}" "${code}"; then
-        log "not a valid code"
+        log "authentication failed"
         exit 1
     fi
 
@@ -379,7 +409,7 @@ do_status() {
 case "${1:-}" in
     enroll)  shift; do_enroll "${1:-}" ;;
     verify)  shift; do_verify "${1:-}" "${2:-}" ;;
-    unlock)  shift; do_unlock "${1:-}" "${2:-}" ;;
+    unlock)  shift; do_unlock "${1:-}" ;;
     lock)    shift; do_lock ;;
     check)   shift; do_check "${1:-}" ;;
     status)  shift; do_status "${1:-}" ;;
