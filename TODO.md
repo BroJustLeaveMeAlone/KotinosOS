@@ -817,8 +817,10 @@ entry point, not a property of individual `sudo` calls.**
 
 The starting position is worth stating plainly, because it is the thing being
 fixed: the primary account is in `wheel` (`firstboot.conf` puts it there) and
-there is no `sudoers` drop-in and no polkit rule anywhere in the image. Today the
-password alone is root. Every claim below is about closing that.
+there is no `sudoers` drop-in and no polkit rule anywhere in the image, so
+`%wheel ALL=(ALL) ALL` is the whole privilege model — one password away from
+root. (With one caveat that turns out to matter; see the correction at the end of
+this section.) Every claim below is about closing that.
 
 #### Why not the GUI
 
@@ -921,19 +923,78 @@ is a question about domains rather than about people, which is what SELinux is
 actually good at — and it is the concrete form of the M6 dependency recorded at
 the bottom of this milestone.
 
-#### What is decided, and what still has to be proven on the VM
+#### Mechanism checks — run on the VM (3 Aug 2026)
 
-The architecture above is the decision. These are mechanism details that are
-believed to work and have **not** been checked on the image yet, listed so they
-are tested rather than assumed:
+The architecture above was decided before any of it was tested. Four mechanism
+details were listed as believed-but-unverified; three are now settled and one
+turned up a bypass that changes the design.
 
-- that `pam_exec.so` in the `auth` phase behaves as needed and fails closed;
-- that Fedora's polkit build supports `polkit.spawn()` in `rules.d` JavaScript;
-- that a grant check runs fast enough to sit in front of every polkit query;
-- that `sudo`'s own `timestamp_timeout` and polkit's `auth_admin_keep` retention
-  do not quietly grant a second window behind the grant's back — two independent
-  upstream timers are exactly the sort of thing that produces an admin mode that
-  reports itself closed while still working.
+**`sudo` will skip the gate entirely unless `timestamp_timeout=0`.** This is the
+important one. A gate in `/etc/pam.d/sudo` lives in the auth stack, and sudo
+caches a successful authentication for five minutes by default — during which it
+does not run that stack at all. Measured by logging every time the stack
+executes, with both `sudo` calls in one session so the ticket actually applies:
+
+| sudoers | second `sudo` | auth stack ran |
+|---|---|---|
+| default (5 min) | **succeeded, no authentication** | 1× (the first only) |
+| `timestamp_timeout=0` | refused | 1× |
+
+So on a default image the second `sudo` gets root without the gate being
+consulted. Unlock, relock, and a `sudo` within five minutes still works, with the
+machine reporting itself locked — exactly the "reports itself closed while still
+working" failure the design set out to avoid, arriving through an upstream
+default rather than through anything we wrote. **A `timestamp_timeout=0` drop-in
+is therefore part of the gate, not an optimisation**, and `tests/` needs a probe
+that fails if it is ever removed. Polkit's `auth_admin_keep` retention is the
+same shape and still to be checked.
+
+**Group membership genuinely cannot express a mode — confirmed.** With a test
+group added and a process started while the user held it, removing the user left
+`id` showing the group gone while `/proc/<pid>/status` still listed the gid:
+
+```
+id now says:                    kotinos wheel
+the SAME running pid still has: 10 1001 1002      <- 1002 is the removed group
+```
+
+Adding the group back also failed to reach the already-running process. Both
+directions behave as the design assumed, which is why the state is a timestamped
+grant rather than a credential.
+
+**`polkit.spawn()` works.** Tested by making the authorization *result* depend on
+it — a rule that spawns and returns YES authorised, and a control without the
+spawn also authorised, so rule loading was not the variable. This polkit is the
+duktape build (`libduktape.so.207`), where spawn support was the open question.
+
+**`pam_exec.so` is present** at `/usr/lib64/security/pam_exec.so`. Whether it
+fails closed in the `auth` phase still needs testing against a check that
+actually returns failure.
+
+**Still unmeasured:** whether the grant check is fast enough to front every
+polkit query. That one needs a grant check to exist first.
+
+#### One correction to the starting position
+
+The section above says that today the password alone is root. That is true of the
+*configuration* — `%wheel ALL=(ALL) ALL` is in `/etc/sudoers`, the primary account
+is in `wheel`, and there is no drop-in or polkit rule of ours anywhere. But on a
+freshly provisioned machine it is not yet true in practice, because
+`kotinos-firstboot` runs `passwd --lock`, so the account has **no usable
+password** at all:
+
+```
+passwd -S kotinos  ->  kotinos L 2026-08-03 ...
+sudo               ->  sudo: a password is required
+```
+
+The user cannot escalate by any means until a password is set, and the thing that
+sets it is M3's first-run experience — which is the piece of M3 still unbuilt. So
+the honest description of the starting position is "one password away from root,
+and that password does not exist yet". This matters for M5 in a way worth
+planning around: the moment a password is first set is inside the privilege
+story, not before it, and admin-mode enrolment probably wants to happen in the
+same flow rather than being bolted on afterwards.
 
 ### Steps
 
@@ -942,6 +1003,13 @@ are tested rather than assumed:
   SELinux protects the grant rather than being the gate. Admin mode is an
   explicit state carrying a timestamped grant, because group membership cannot
   express a mode that has to end
+- [ ] **Disable sudo's authentication cache** — a `timestamp_timeout=0` drop-in,
+  and a probe in `tests/` that fails if it goes missing. This is not tuning: it
+  was measured that a second `sudo` within five minutes takes root *without
+  running the PAM auth stack at all*, so the gate is simply absent for that
+  window. Do this before or with the PAM work, not after, or every later test of
+  the gate will pass for the wrong reason. Check polkit's `auth_admin_keep`
+  retention for the same hole
 - [ ] **Choose the factor** — FIDO2 (`pam_u2f`) or TOTP (`pam_oath`), offline in
   both cases. FIDO2 is stronger and needs no clock; TOTP needs no hardware but
   **depends on the machine's time being right**, which on a desktop with a dead
