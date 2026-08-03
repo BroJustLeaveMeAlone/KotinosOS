@@ -359,20 +359,24 @@ report_permissive_domains() {
 
     # The override module itself, not only its effect.
     #
-    # The check above reads the policy the kernel loaded, which comes from the
-    # compiled policy under /etc and therefore survives into the booted system.
-    # `semodule` installs the priority-400 override into the policy STORE under
-    # /var/lib/selinux, and this image's /var does not survive first boot. So the
-    # two checks can disagree, and the disagreement is the interesting case: the
-    # domains read as enforcing while the store has no record of why.
+    # The check above reads the policy the kernel loaded. This one reads the
+    # STORE that policy is rebuilt from, and the two can disagree: the domains
+    # would still read as enforcing while the store had no record of why.
     #
-    # That state is not a problem until something rebuilds the policy, and then
-    # it is: `setsebool -P`, `semanage fcontext`, or any semodule operation
+    # That state is harmless until something rebuilds the policy, and then it is
+    # not. `setsebool -P`, `semanage fcontext` or any semodule operation
     # regenerates the binary policy from the store, and a store holding only
     # Fedora's priority-100 ssh module regenerates it WITH the permissive
-    # statements back in. The machine would return to unconfined SSH
-    # authentication as a side effect of an unrelated administrative command,
-    # with nothing in the journal naming it. Cheap to check, silent if missed.
+    # statements back in -- unconfined SSH authentication returning as a side
+    # effect of an unrelated administrative command, with nothing in the journal
+    # naming it.
+    #
+    # On this image the two do agree, and that was measured rather than assumed:
+    # /var/lib/selinux is a symlink to /etc/selinux, so the store rides on the
+    # root subvolume instead of the discarded /var, and a freshly booted machine
+    # kept the override across both `setsebool -P` and `semanage fcontext -a`.
+    # The check stays because that conclusion rests on a symlink a future Fedora
+    # could move, and one line of output is a cheap way to find out.
     local modules
     modules="$(semodule -lfull 2>/dev/null || true)"
     if [[ -z "${modules}" ]]; then
@@ -382,10 +386,11 @@ report_permissive_domains() {
         printf '  ok: the priority-400 ssh override is in the policy store\n'
     else
         printf '  *** the priority-400 ssh override is NOT in the policy store ***\n'
-        printf '  The domains are enforcing right now because the compiled policy\n'
-        printf '  under /etc survived, but the store cannot reproduce it. The next\n'
-        printf '  setsebool -P or semanage fcontext on this machine will rebuild\n'
-        printf '  from Fedora'\''s module and silently undo the confinement above.\n'
+        printf '  The domains may still read as enforcing, because the compiled\n'
+        printf '  policy under /etc outlives the store. But the store can no longer\n'
+        printf '  reproduce it, so the next setsebool -P or semanage fcontext will\n'
+        printf '  rebuild from Fedora'\''s module and silently undo the confinement.\n'
+        printf '  Check whether /var/lib/selinux is still a symlink to /etc/selinux.\n'
         findings=$(( findings + 1 ))
     fi
 

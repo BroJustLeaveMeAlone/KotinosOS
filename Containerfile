@@ -461,21 +461,26 @@ RUN grep -q '^SELINUX=enforcing' /etc/selinux/config
 # The same checks cover a future Fedora renaming the types, where both greps
 # would silently match nothing and the old assertion would have passed.
 #
-# WHAT THIS STEP DOES NOT CARRY ONTO THE RUNNING MACHINE.
-# semodule installs into the policy store under /var/lib/selinux, and this
-# image's /var does not survive first boot -- the same property that forces
-# account creation into kotinos-firstboot rather than the build. What does
-# survive is the COMPILED policy under /etc/selinux/targeted/policy, so the
-# machine boots with both domains enforcing and the assertions here stay true of
-# the booted system.
+# THE POLICY STORE IS NOT IN THE DISCARDED /var. This was worth checking, since
+# almost everything else this image writes to /var is thrown away on first boot,
+# and a store that did not survive would leave the machine enforcing today but
+# unable to reproduce why -- the next `setsebool -P` would rebuild policy from
+# Fedora's priority-100 module and silently restore both permissive statements.
 #
-# The part at risk is the ability to REBUILD that policy. A store missing the
-# priority-400 override rebuilds from Fedora's priority-100 ssh module, which
-# still carries the permissive statements -- so the first `setsebool -P` or
-# `semanage fcontext` run on the machine would put both domains quietly back to
-# permissive, with nothing in the journal to say so. M5 is a milestone full of
-# exactly that kind of command, which is why tests/attack-surface.sh checks for
-# the override module itself and not only for its effect.
+# It does not happen, because /var/lib/selinux is a SYMLINK to /etc/selinux. The
+# store therefore lives on the root subvolume with the rest of /etc and is
+# carried by the image, not recreated by tmpfiles. Measured on a freshly booted
+# m4d, where /var had just been created from scratch:
+#
+#   /var/lib/selinux -> ../../etc/selinux
+#   400 ssh                  cil          <- override present in the store
+#   sshd types permissive: 0 of 2
+#
+# and after running both of the commands that would have exposed the problem --
+# `setsebool -P` and `semanage fcontext -a` -- the override was still registered
+# and both domains still enforcing. tests/attack-surface.sh checks for the module
+# in the store anyway: the reasoning above is now verified rather than assumed,
+# but it depends on a symlink that a future Fedora could move.
 RUN cd /tmp && \
     semodule -c -E ssh && \
     test "$(grep -c '(typepermissive sshd_' ssh.cil)" -gt 0 && \

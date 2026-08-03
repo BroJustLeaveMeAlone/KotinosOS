@@ -656,20 +656,35 @@ value is close to nil. Only four permissive domains have a live process at all:
 the two SSH ones now fixed, plus `switcheroo_control_t` and `systemd_oomd_t`,
 both local and unprivileged.
 
-**One caveat this carries into M5, and it is M5-shaped.** `semodule` installs the
-priority-400 override into the policy *store* under `/var/lib/selinux`, and this
-image's `/var` does not survive first boot — the same property that forces
-account creation into `kotinos-firstboot`. The *compiled* policy under `/etc`
-does survive, so the booted machine is genuinely enforcing and every check above
-is true of it. What may not survive is the ability to **rebuild** that policy: a
-store holding only Fedora's priority-100 `ssh` module regenerates it with the
-permissive statements back in. So `setsebool -P`, `semanage fcontext`, or any
-`semodule` call could undo the confinement as a side effect of an unrelated
-command, silently. M5 is full of exactly those commands, which is why
-`tests/attack-surface.sh` now checks for the override module itself and not only
-for its effect, and why the build asserts the module landed at priority 400.
-Whether the store actually survives is a fact to establish on the next VM run
-rather than a thing to assume in either direction.
+**A caveat was raised here and then disproved, which is worth recording because
+the reasoning was sound.** `semodule` installs the priority-400 override into the
+policy *store*, and if that store lived in `/var` it would be discarded on first
+boot — the same property that forces account creation into `kotinos-firstboot`.
+The booted machine would still be enforcing, because the *compiled* policy under
+`/etc` survives, but it would have lost the ability to **rebuild** that policy:
+the first `setsebool -P` or `semanage fcontext` would regenerate it from Fedora's
+priority-100 module with the permissive statements back in, silently. M5 is full
+of exactly those commands, so this would have mattered.
+
+It does not happen. `/var/lib/selinux` is a **symlink to `/etc/selinux`**, so the
+store sits on the root subvolume and is carried by the image. Measured on a
+freshly booted `m4d`, where `/var` had just been created from scratch:
+
+```
+/var/lib/selinux -> ../../etc/selinux
+400 ssh                  cil          <- override present in the store
+sshd types permissive: 0 of 2
+```
+
+Then both commands that would have exposed the problem were run directly —
+`setsebool -P selinuxuser_execmod on` and `semanage fcontext -a` — and after each
+one the override was still registered and both domains still enforcing, with a
+mislabelled `authorized_keys` still refused at `permissive=0`.
+
+The check stays in `tests/attack-surface.sh` regardless, and the build still
+asserts the module landed at priority 400. The conclusion is verified rather than
+assumed, but it rests on a symlink that a future Fedora could move, and the cost
+of noticing that early is one line of output.
 
 #### `auditd`: not installed, and the reason M4 gave was wrong
 
@@ -830,14 +845,19 @@ domain may do a thing; it can never ask a human for a token. It can enforce the
 consequence of a decision made elsewhere, which means it cannot be the place the
 decision is made.
 
-There is also a specific interaction with what was just fixed. Modelling "admin
-mode is open" as an SELinux boolean means `setsebool`, and the persistent form
-`setsebool -P` is exactly the operation that rebuilds the binary policy from the
-store — the operation the previous commit established could silently undo the SSH
-confinement if the priority-400 override did not survive into `/var`. Building
-the privilege gate out of the one command most likely to break the confinement
-work is a bad trade, and the non-persistent form is the only one that is even
-conceptually right for a state that must not survive reboot.
+Modelling "admin mode is open" as an SELinux boolean is wrong for a second,
+simpler reason: a boolean is **global machine state**, and admin mode is a
+property of one authenticated session. Two users, or one user and a background
+service, would share the same switch, and a mode that cannot distinguish who
+opened it is not a privilege boundary.
+
+(An earlier version of this section argued against `setsebool -P` on the grounds
+that rebuilding the policy store might silently undo the SSH confinement. That
+concern was tested on a freshly booted machine and did not reproduce — the
+override survives both `setsebool -P` and `semanage fcontext -a`, because
+`/var/lib/selinux` is a symlink to `/etc/selinux`. The argument above stands on
+its own without it. The persistent form is still the wrong shape for state that
+must not outlive a reboot.)
 
 #### Why PAM
 
