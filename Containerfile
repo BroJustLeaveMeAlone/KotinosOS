@@ -563,6 +563,43 @@ RUN printf '# Written by the KotinosOS image. See the M5 notes in TODO.md.\n# su
     grep -q '^Defaults timestamp_timeout=0$' /etc/sudoers.d/10-kotinos-no-timestamp && \
     test "$(stat -c %a /etc/sudoers.d/10-kotinos-no-timestamp)" = 440
 
+# The second factor: TOTP, and the protection its secret requires.
+#
+# pam_oath verifies a time-based code; oathtool generates and enrols them. Both
+# are offline, which is the requirement -- nothing here talks to a network.
+#
+# THE SECRET IS THE WEAK POINT OF THIS CHOICE, so it is handled here rather than
+# left to the enrolment tool. Unlike FIDO2, where the private key never leaves
+# the token, TOTP keeps a shared secret on the very machine it defends: anything
+# that can read /etc/users.oath can generate valid codes forever, and the user
+# has no way to notice. M4 found every file this image copied into /etc shipping
+# world-writable, with an ordinary user demonstrably editing one -- so "the file
+# will be fine" is exactly the assumption this project has already been wrong
+# about once.
+#
+# Two layers, because either alone has a failure mode the other covers:
+#
+#   - 0600 root:root stops every unprivileged user. Created HERE rather than at
+#     enrolment, so the protection exists from first boot and does not depend on
+#     the enrolment tool getting it right on a machine nobody is watching.
+#   - The SELinux label decides which *domain* may read it, which DAC cannot
+#     express. Left alone the file would be `etc_t` -- verified, and readable by
+#     a wide set of confined services. `shadow_t` is the type /etc/shadow uses,
+#     which is the correct comparison: this file is a credential, not config.
+#     Fedora ships no file-context rule for it, also verified, so this is ours.
+#
+# The empty file is harmless before enrolment: pam_oath finds no entry for the
+# user and denies, which is the direction a missing credential should fail.
+RUN dnf install -y pam_oath oathtool && dnf clean all && \
+    test -f /usr/lib64/security/pam_oath.so && \
+    command -v oathtool >/dev/null && \
+    semanage fcontext -a -t shadow_t '/etc/users\.oath' && \
+    touch /etc/users.oath && \
+    chown root:root /etc/users.oath && \
+    chmod 0600 /etc/users.oath && \
+    test "$(matchpathcon -n /etc/users.oath | tr -d ' ')" = "system_u:object_r:shadow_t:s0" && \
+    test "$(stat -c '%a %U %G' /etc/users.oath)" = "600 root root"
+
 # Optional development access. Empty in release builds.
 #
 # Fedora bootc places every account's home under /var (/root -> /var/roothome,

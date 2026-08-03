@@ -468,6 +468,43 @@ check_sudo_timestamp() {
     else
         printf '  ok: no local polkit rule caches authorisation with auth_admin_keep\n'
     fi
+
+    # The TOTP secret. This is the shared secret the second factor rests on, so
+    # anything that can read it can mint valid codes indefinitely and silently.
+    # Checked on the running machine as well as at build time, because the modes
+    # and labels that matter are the ones a booted system actually has -- which
+    # is the distinction M4's world-writable finding turned on.
+    local oath=/etc/users.oath
+    if [[ ! -e "${oath}" ]]; then
+        printf '  NOT CHECKED: %s does not exist, so the TOTP secret protection\n' "${oath}"
+        printf '  could not be verified. Expected the image to create it.\n'
+        findings=$(( findings + 1 ))
+        return 0
+    fi
+
+    local mode owner
+    mode="$(stat -c '%a' "${oath}" 2>/dev/null)"
+    owner="$(stat -c '%U:%G' "${oath}" 2>/dev/null)"
+    if [[ "${mode}" == "600" && "${owner}" == "root:root" ]]; then
+        printf '  ok: TOTP secret is %s %s\n' "${mode}" "${owner}"
+    else
+        printf '  *** TOTP secret is %s %s, expected 600 root:root ***\n' "${mode}" "${owner}"
+        printf '  Anything that can read it can generate valid second factors.\n'
+        findings=$(( findings + 1 ))
+    fi
+
+    if command -v secon >/dev/null 2>&1 || command -v ls >/dev/null 2>&1; then
+        local label
+        label="$(ls -Z "${oath}" 2>/dev/null | awk '{print $1}')"
+        if [[ "${label}" == *:shadow_t:* ]]; then
+            printf '  ok: TOTP secret is labelled shadow_t, not etc_t\n'
+        else
+            printf '  *** TOTP secret label is %s ***\n' "${label:-unknown}"
+            printf '  Expected shadow_t. As etc_t it is readable by a wide set of\n'
+            printf '  confined domains, which is what the label is there to stop.\n'
+            findings=$(( findings + 1 ))
+        fi
+    fi
 }
 
 if [[ "${in_container}" == yes ]]; then
