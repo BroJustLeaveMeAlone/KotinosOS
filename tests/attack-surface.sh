@@ -409,6 +409,67 @@ report_permissive_domains() {
     fi
 }
 
+# ============================================================================
+# The privilege gate's preconditions
+# ============================================================================
+#
+# M5 puts the admin-mode gate in sudo's PAM auth stack. sudo does not run that
+# stack while a cached authentication is valid, so `timestamp_timeout=0` is the
+# difference between the gate being consulted and being absent for five minutes
+# after any successful sudo. Measured, not assumed: with the default sudoers a
+# second sudo in the same session took root without the stack running at all.
+#
+# This is checked here rather than only asserted at build time because the
+# failure is invisible on a running machine -- sudo still works, admin mode
+# still reports itself locked, and the gap only shows up if someone thinks to
+# time it.
+check_sudo_timestamp() {
+    section "privilege gate preconditions"
+
+    local conf
+    conf="$(grep -rhE '^[[:space:]]*Defaults[[:space:]]+timestamp_timeout=' \
+            /etc/sudoers /etc/sudoers.d/ 2>/dev/null | tail -1)"
+
+    if [[ -z "${conf}" ]]; then
+        printf '  *** sudo has no timestamp_timeout setting ***\n'
+        printf '  It therefore caches authentication (5 minutes by default) and\n'
+        printf '  skips its PAM auth stack for that window -- which is where the\n'
+        printf '  admin-mode gate lives. Expected a drop-in setting it to 0.\n'
+        findings=$(( findings + 1 ))
+    elif [[ "${conf}" =~ timestamp_timeout=0([[:space:]]|$) ]]; then
+        printf '  ok: sudo authenticates every time (%s)\n' "$(echo "${conf}" | tr -s ' ')"
+    else
+        printf '  *** sudo caches authentication: %s ***\n' "$(echo "${conf}" | tr -s ' ')"
+        printf '  Any non-zero value leaves a window in which sudo grants root\n'
+        printf '  without consulting the gate.\n'
+        findings=$(( findings + 1 ))
+    fi
+
+    # polkit's own retention is the same trap wearing different clothes: a rule
+    # returning auth_admin_keep caches the authorisation, so the second request
+    # never reaches the gate either.
+    #
+    # Matched case-insensitively, because the two places this name appears do not
+    # agree on case: .policy XML files say `auth_admin_keep`, while the JavaScript
+    # in rules.d says `polkit.Result.AUTH_ADMIN_KEEP`. A case-sensitive grep for
+    # the XML spelling silently never fires on a rules.d file -- which is what
+    # this check exists to read. Found by planting a rule and watching the guard
+    # report "ok".
+    local keep
+    keep="$(grep -rli 'auth_admin_keep' /etc/polkit-1/rules.d/ 2>/dev/null || true)"
+    if [[ -n "${keep}" ]]; then
+        printf '  *** a local polkit rule uses auth_admin_keep ***\n'
+        while IFS= read -r fpath; do
+            [[ -n "${fpath}" ]] && printf '      %s\n' "${fpath}"
+        done <<< "${keep}"
+        printf '  That caches the authorisation and bypasses the gate on the next\n'
+        printf '  request, the same way sudo timestamps do. Use auth_admin.\n'
+        findings=$(( findings + 1 ))
+    else
+        printf '  ok: no local polkit rule caches authorisation with auth_admin_keep\n'
+    fi
+}
+
 if [[ "${in_container}" == yes ]]; then
     skip_in_container "a container does not carry the host's SELinux policy, so this always reads Disabled"
     printf '  The build asserts SELINUX=enforcing in /etc/selinux/config, and the\n'
@@ -424,6 +485,13 @@ elif command -v getenforce >/dev/null 2>&1; then
 else
     echo "  getenforce not available"
     findings=$(( findings + 1 ))
+fi
+
+if [[ "${in_container}" == yes ]]; then
+    section "privilege gate preconditions"
+    skip_in_container "sudo and polkit configuration is only meaningful on a booted machine"
+else
+    check_sudo_timestamp
 fi
 
 # ============================================================================

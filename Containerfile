@@ -526,6 +526,43 @@ RUN cd /tmp && \
 RUN chmod u-s /usr/bin/chfn /usr/bin/chsh && \
     ! find /usr/bin/chfn /usr/bin/chsh -perm /u+s | grep -q .
 
+# Make sudo authenticate every time (M5 groundwork).
+#
+# sudo caches a successful authentication for five minutes by default, and
+# during that window it does not run its PAM auth stack at all. That is fine on
+# a developer workstation and wrong here, because the admin-mode gate M5 is
+# building lives in exactly that stack. Measured on a booted machine, logging
+# every execution of the stack, with both calls in one session so the ticket
+# applies:
+#
+#   default sudoers     second sudo succeeded WITHOUT authenticating   stack ran 1x
+#   timestamp_timeout=0 second sudo refused                            stack ran 1x
+#
+# So without this, a user could unlock admin mode, let it relock, and still take
+# root for the rest of the five minutes while the machine reported itself
+# locked -- an admin mode that reports itself closed while still working. The
+# hole arrives through an upstream default rather than through anything we
+# wrote, which is exactly the kind that survives review.
+#
+# This is therefore part of the gate rather than a tuning preference, and it is
+# installed now, ahead of the PAM work, so that later tests of the gate cannot
+# pass for the wrong reason.
+#
+# The cost is honest and worth stating: every sudo asks for a password, with no
+# grace period. On an appliance where the intended route to privilege is a
+# deliberate admin-mode unlock rather than a string of sudo calls, that is the
+# behaviour we want anyway.
+#
+# Mode 0440 is required -- sudo refuses to read a sudoers file with looser
+# permissions and disables itself rather than guessing, so `visudo -c` is run
+# here to fail the build rather than the machine.
+RUN printf '# Written by the KotinosOS image. See the M5 notes in TODO.md.\n# sudo must consult its PAM stack every time: the admin-mode gate lives there.\nDefaults timestamp_timeout=0\n' \
+      > /etc/sudoers.d/10-kotinos-no-timestamp && \
+    chmod 0440 /etc/sudoers.d/10-kotinos-no-timestamp && \
+    visudo -c -q && \
+    grep -q '^Defaults timestamp_timeout=0$' /etc/sudoers.d/10-kotinos-no-timestamp && \
+    test "$(stat -c %a /etc/sudoers.d/10-kotinos-no-timestamp)" = 440
+
 # Optional development access. Empty in release builds.
 #
 # Fedora bootc places every account's home under /var (/root -> /var/roothome,
