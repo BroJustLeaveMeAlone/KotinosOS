@@ -24,7 +24,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ✅ **Core complete** (22 Jul 2026) — wizard outstanding |
 | M3.5 | Identity & comfort — look, motion, personalization, friction removal | 🚧 **In progress** — splash, windows, comfort features done |
 | M4 | Sandboxing & hardening | ✅ **Complete** (27 Jul 2026) — all four exit criteria met on a clean image; 22/22 adversarial boundaries hold. Eight defects found and fixed, two of which let an unprivileged user attack the safety net |
-| M5 | Admin mode & offline 2FA | 📋 Planned — brief written; enforcement point must be decided before any UI |
+| M5 | Admin mode & offline 2FA | 🚧 **In progress** — enforcement point decided (3 Aug 2026): PAM is the gate, `sudoers` + a polkit rule apply it, SELinux protects the grant. Factor choice next |
 | M6 | AI assistant (+ M6b semantic file layer) | ⬜ Not started |
 | M7 | Distribution infrastructure | ⬜ Not started |
 | M8 | Hardware QA & v1.0 | ⬜ Not started |
@@ -718,7 +718,7 @@ subject to, not just the user.
 
 ---
 
-## Milestone 5 — Admin mode & offline 2FA 📋 PLANNED (pillar 4)
+## Milestone 5 — Admin mode & offline 2FA 🚧 IN PROGRESS (pillar 4)
 
 **In plain words:** the everyday account cannot break the machine, and when the
 user genuinely needs full control they unlock it on purpose — with something
@@ -793,19 +793,135 @@ start from facts rather than assumptions:
   trying it" exit criterion and should shape which factor is built first, rather
   than being discovered halfway through.
 
+### Decision: the enforcement point (3 Aug 2026)
+
+**PAM is the gate. `sudoers` and a polkit rule are how the gate is applied to the
+two paths to root. SELinux is the backstop that protects the gate, and is
+deliberately not the gate itself. Admin mode is an explicit state with its own
+entry point, not a property of individual `sudo` calls.**
+
+The starting position is worth stating plainly, because it is the thing being
+fixed: the primary account is in `wheel` (`firstboot.conf` puts it there) and
+there is no `sudoers` drop-in and no polkit rule anywhere in the image. Today the
+password alone is root. Every claim below is about closing that.
+
+#### Why not the GUI
+
+Settled already by `PLAN.md` and repeated at the top of this milestone: `sudo` in
+a terminal walks around it. Recorded here only because it also fails the M6 test
+in one step — an in-process AI agent never touches the GUI at all, so a gate
+drawn there is invisible to precisely the caller that matters most.
+
+#### Why not polkit alone
+
+polkit is a real authorisation layer and it is where the desktop's privileged
+operations funnel — `systemctl`, PackageKit, udisks, system Flatpak installs. But
+**`sudo` does not consult polkit.** A polkit-only gate is the mirror image of the
+GUI trap: it would lock the desktop and leave the terminal open, rather than the
+other way round. It is a necessary half, not a whole.
+
+#### Why not SELinux alone
+
+M4's closeout proved the image can ship modified policy that sticks, so this was
+a live option rather than a hypothetical. It is still the wrong choice for the
+*gate*, for a reason that is structural rather than a matter of effort:
+**SELinux has no notion of interactive authentication.** It can decide whether a
+domain may do a thing; it can never ask a human for a token. It can enforce the
+consequence of a decision made elsewhere, which means it cannot be the place the
+decision is made.
+
+There is also a specific interaction with what was just fixed. Modelling "admin
+mode is open" as an SELinux boolean means `setsebool`, and the persistent form
+`setsebool -P` is exactly the operation that rebuilds the binary policy from the
+store — the operation the previous commit established could silently undo the SSH
+confinement if the priority-400 override did not survive into `/var`. Building
+the privilege gate out of the one command most likely to break the confinement
+work is a bad trade, and the non-persistent form is the only one that is even
+conceptually right for a state that must not survive reboot.
+
+#### Why PAM
+
+It is the one place both paths meet. `sudo`, `su`, `login`, `sddm` and `sshd`
+have stacks, and so does polkit — `polkit-agent-helper-1` links `libpam` with its
+service file at `/usr/lib/pam.d/polkit-1`. One stack decision therefore reaches
+the terminal and the desktop's authorisation prompts together, which is what the
+GUI-theatre warning demands.
+
+It is also **factor-agnostic**, and that matters more than it looks given the
+constraint recorded above. The VM cannot exercise FIDO2, so the factor choice is
+partly hostage to test hardware. Putting the gate in PAM means `pam_oath` and
+`pam_u2f` are interchangeable at the gate, and the factor decision cannot force
+an architecture change later.
+
+#### The trap that shaped the rest of the design
+
+The obvious way to express "admin mode is on" is group membership — drop the user
+from `wheel`, add them back on unlock. **This does not work, and it fails
+silently in the dangerous direction.** Supplementary groups are fixed on a
+process when its credentials are established, so adding the user to `wheel` at
+unlock does not reach shells that are already running, and — the part that
+matters — removing them at relock does not revoke shells that are already
+running. A terminal that was open when admin mode was granted would keep root
+indefinitely, while the machine reported itself locked. That is a direct failure
+of the "admin mode ends by itself" exit criterion, and it would not show up in
+any test that unlocks, relocks, and then opens a *new* terminal to check.
+
+So the state is a **timestamped grant consulted on every escalation attempt**,
+never a cached credential. Expiry is then a property of the check rather than
+something that has to be pushed out to existing processes.
+
+#### Admin mode is entered explicitly
+
+If the gate were "any `sudo` call", then `kotinos-escalate` would pin a
+deployment and snapshot `/var` on every single `sudo`. The safety capture would
+become noise, and noise gets switched off. One unlock, one capture, one window:
+a dedicated entry point prompts for password plus factor, runs the escalation
+hook, and only then writes the grant.
+
+This is also where `kotinos-escalate` finally gets the caller its header has been
+asking for since M2. It already exits non-zero when either capture fails, and the
+unlock path treats that as *do not write the grant* — the door does not open, and
+the failure is the reason.
+
+#### How each path fails closed
+
+- **`sudo`** — a check in `/etc/pam.d/sudo` that runs before the normal auth and
+  refuses unless a valid, unexpired grant exists. The wheel user with the correct
+  password and no grant gets nothing, which is exit criterion 1 stated as a
+  mechanism.
+- **polkit** — a rule in `/etc/polkit-1/rules.d` consulting the *same* check, so
+  the two paths cannot drift apart into two different answers about whether admin
+  mode is open.
+
+#### What SELinux is still for
+
+Protecting the grant. If the AI in M6, or a flaw in some setuid binary, can write
+the grant file, then every layer above is decorative. Confining who may write it
+is a question about domains rather than about people, which is what SELinux is
+actually good at — and it is the concrete form of the M6 dependency recorded at
+the bottom of this milestone.
+
+#### What is decided, and what still has to be proven on the VM
+
+The architecture above is the decision. These are mechanism details that are
+believed to work and have **not** been checked on the image yet, listed so they
+are tested rather than assumed:
+
+- that `pam_exec.so` in the `auth` phase behaves as needed and fails closed;
+- that Fedora's polkit build supports `polkit.spawn()` in `rules.d` JavaScript;
+- that a grant check runs fast enough to sit in front of every polkit query;
+- that `sudo`'s own `timestamp_timeout` and polkit's `auth_admin_keep` retention
+  do not quietly grant a second window behind the grant's back — two independent
+  upstream timers are exactly the sort of thing that produces an admin mode that
+  reports itself closed while still working.
+
 ### Steps
 
-- [ ] **Decide the enforcement point, and write down why** — the PAM stack is the
-  likely answer, since `sudo`, `su`, `polkit` and the display manager all consult
-  it, which makes it the one place a GUI cannot be walked around. An LSM is the
-  heavier alternative. This decision gates everything else in the milestone and
-  must be made first.
-  *Useful evidence from closing the M4 items:* the image can now modify SELinux
-  policy at build time and have it stick — the `ssh` module is rebuilt without
-  its permissive statements and the result verified on a booted machine. So
-  "policy layer" is a demonstrated capability here rather than an aspiration,
-  which makes an SELinux-backed component of the gate more credible than it
-  looked when the brief was written
+- [x] **Decide the enforcement point, and write down why** — done, above. PAM is
+  the gate, `sudoers` and a polkit rule apply it to the two paths to root, and
+  SELinux protects the grant rather than being the gate. Admin mode is an
+  explicit state carrying a timestamped grant, because group membership cannot
+  express a mode that has to end
 - [ ] **Choose the factor** — FIDO2 (`pam_u2f`) or TOTP (`pam_oath`), offline in
   both cases. FIDO2 is stronger and needs no clock; TOTP needs no hardware but
   **depends on the machine's time being right**, which on a desktop with a dead
