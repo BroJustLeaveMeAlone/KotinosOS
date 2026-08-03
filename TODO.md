@@ -361,7 +361,7 @@ it tests *specific* claims adversarially, the way M1 tested rollback and M2 ran
 - [x] **Flatpak app model** — installed, with `xdg-desktop-portal` as the broker. The Flathub remote ships as `/etc/flatpak/remotes.d/flathub.flatpakrepo`, not `flatpak remote-add`. Verified on a booted VM, where the timestamps tell the whole story: the remote file is dated image-build time and survived, while `/var/lib/flatpak/repo/config` is dated boot time because the image's `/var` was discarded exactly as `disk-layout.toml` says. Per-user installs now work — a real runtime was installed by an unprivileged user with no polkit prompt
 - [x] **Prove the sandbox confines** — `tests/sandbox-confinement.sh`, 4/4 on the VM. A canary in `~/.ssh` and in `Documents` is invisible to a sandbox without filesystem permission and readable with `--filesystem=home`, the two runs otherwise identical. The denial shows as *"No such file or directory"* rather than *"Permission denied"*, which is the sandbox not merely refusing the read but never mapping the path
 - [x] **Make "Flatpak-only" real, not just default** — confirmed on the VM: `/usr` is read-only (`touch` fails with *Read-only file system*), a system-wide `flatpak install` is refused for an ordinary user by polkit (*"operation Deploy not allowed for user"*), and per-user installs land in the user's own home where they cannot affect anyone else
-- [~] **SELinux** — `Enforcing` confirmed on the booted VM, with a build-time assertion and a boot health-check assertion so a permissive image can neither ship nor boot unnoticed. Still open: demonstrate one denial actually being enforced
+- [x] **SELinux** — `Enforcing` confirmed on the booted VM, with a build-time assertion and a boot health-check assertion so a permissive image can neither ship nor boot unnoticed. A denial is now shown actually being enforced: with `sshd_session_t` and `sshd_auth_t` no longer permissive, a mislabelled `authorized_keys` gets the login **refused** and the AVC reads `permissive=0`, where M4's identical experiment succeeded at `permissive=1`
 - [x] **Protect the safety net from the user's own processes** — this is where the milestone earned itself. See the snapper finding below: it was **not** protected, and the test proved it by destroying every snapshot on the machine. Now fixed and re-proved against the identical attack
 - [x] **Firewall** — default-deny inbound, SSH genuinely absent from the default zone (it never was before — see findings), both the removal and the dev re-add asserted at build time. A release image's reachable inbound surface is now exactly one service, `mdns`, kept deliberately and documented in the Containerfile. LLMNR was found listening on `0.0.0.0:5355` and removed
 - [x] **Kernel / sysctl hardening** — `90-kotinos-sysctl.conf` covers pointer and log exposure, ptrace scope, unprivileged BPF and runtime kernel loading. Unprivileged user namespaces are deliberately left enabled and documented: Flatpak and bubblewrap build their sandboxes out of exactly that feature. The audit confirmed the payoff from the other side — `bwrap` is **not** setuid on this image, so keeping user namespaces removes a setuid binary rather than adding risk
@@ -601,35 +601,88 @@ service, because upstream hit this same problem.
 unprivileged user namespaces instead. That is the same kernel feature
 `90-kotinos-sysctl.conf` deliberately leaves enabled, so the sandbox costs no
 setuid binary — the reason "disable unprivileged userns" would have been the
-wrong hard line. Separately, `chfn` and `chsh` are setuid root so a user can
-edit their own `/etc/passwd` fields, which an appliance with one account and a
-fixed shell has no real use for. They are recorded as removal candidates rather
-than removed on a hunch, since removing them means touching shadow-utils.
+wrong hard line. Separately, the audit found `chfn` and `chsh` setuid root so a
+user can edit their own `/etc/passwd` fields, which an appliance with one account
+and a fixed shell has no real use for. They were recorded as removal candidates
+rather than removed on a hunch; both have since had the setuid bit cleared —
+see "Finishing touches" below.
 
-### Finishing touches — carried into M5, not silently dropped
+### Finishing touches — done (3 Aug 2026)
 
-M4 is complete against its exit criteria. Two things are deliberately left open
-rather than counted, and both are carried into M5 (below) because M5 is the
-milestone that owns the privilege and policy layer:
+The three items M4 left open have been closed. Two of them turned out to rest on
+a premise that was wrong, which is the main reason they were worth doing rather
+than carrying forward indefinitely.
 
-1. **The permissive-domain review.** `getenforce` says `Enforcing`, and that is
-   a global answer to a per-domain question. Forty domains ship permissive,
-   including `sshd_session_t` and `sshd_auth_t`. Not fixed here because forcing
-   them enforcing without policy work breaks SSH, and a broken login is a worse
-   outcome than a documented gap.
-2. **No `auditd`.** Denials reach the journal, so nothing is invisible, but
-   there is no cross-boot audit trail and no `ausearch`/`aureport`.
+#### SSH authentication is now actually confined
 
-`tests/attack-surface.sh` now prints the security-relevant permissive domains on
-every run, so this stays visible instead of decaying into a doc nobody re-reads:
+`getenforce` returns a single global answer to a per-domain question. Fedora
+ships **41 builtin permissive types**, and inside a permissive domain the policy
+evaluates the access, logs the denial, and allows it anyway. Two of them —
+`sshd_session_t` and `sshd_auth_t` — are the domains handling SSH authentication.
 
-```
-  permissive domains: 40 total (upstream defaults)
-  NOT CONFINED despite Enforcing, and security-relevant:
-      sshd_auth_t
-      sshd_session_t
-      systemd_ssh_issue_t
-```
+M4 assumed forcing them enforcing would break login and left them alone. That
+assumption was never tested, and it was wrong.
+
+Getting there needed a mechanism M4 had not found. `semanage permissive -d` only
+removes types added with `semanage permissive -a`; builtin ones come from
+`(typepermissive x)` compiled into the service's own policy module and the
+removal fails outright. The fix is to install a corrected copy of the `ssh`
+module at a higher priority, which the Containerfile now derives at build time.
+Overriding a policy module would normally be a bad trade — it shadows every
+future upstream fix — but this is an image-based OS, so the override is
+re-derived from that build's own `selinux-policy` on every build and the freeze
+lasts exactly one image.
+
+Verified on a booted VM. The M4 experiment that failed then now passes:
+
+| | M4 (permissive) | now (enforcing) |
+|---|---|---|
+| mislabelled `authorized_keys` | login **succeeded** | login **REFUSED** |
+| the AVC | `permissive=1` | `permissive=0` |
+
+Key login as root and as the user, command execution, `scp` in both directions,
+`sftp`, and repeated sessions all work, with **no new enforced denials**. SSH
+password auth could not be confirmed either way: it fails on this image for an
+unrelated reason — the dev account has no home directory, a `/var`-shadowing
+artefact — and it fails **identically with the domains permissive**, so SELinux
+is not involved. Release images have no dev account.
+
+**The other 39 were reviewed and deliberately left.** 22 of them label software
+this image does not install, so they are not attack surface at all — including
+`gnome_remote_desktop_t` and `samba_bgqd_t`, the two that sounded worst. Most of
+the remainder are systemd generators that run for milliseconds during early
+boot, where the breakage risk is a machine that will not start and the security
+value is close to nil. Only four permissive domains have a live process at all:
+the two SSH ones now fixed, plus `switcheroo_control_t` and `systemd_oomd_t`,
+both local and unprivileged.
+
+#### `auditd`: not installed, and the reason M4 gave was wrong
+
+M4 recorded the gap as "no cross-boot trail". There is one — `/var/log/journal`
+exists, the journal is persistent, and AVCs land in it. What is actually absent
+is the audit *tooling* (`ausearch`, `aureport`) and rule-based auditing.
+
+So the decision is to leave `auditd` out for now, on narrower grounds than the
+original note implied: the denial record already survives reboots, and what
+`auditd` adds is watches and syscall rules, which are worth having only once
+there is a privileged path worth watching. That path is admin mode, and
+designing the rules alongside it in M5 is better than installing a daemon
+speculatively now. Worth stating plainly: neither option is tamper-evident
+against a root-level compromise, so this is a convenience-and-forensics
+trade-off, not a security boundary.
+
+#### `chfn` and `chsh` are no longer setuid
+
+Both were setuid root so a user could edit their own `/etc/passwd` fields. On a
+single-account appliance with a fixed shell, the display name belongs to the
+settings app and the login shell is an admin-mode decision. The setuid bit is
+cleared rather than the package removed, since shadow-utils also provides
+`passwd`, `chage`, `gpasswd` and `newgrp`. The value is not that these two have
+a known flaw — it is that they stop mattering if one is found. The setuid count
+drops from 18 to 16.
+
+`tests/attack-surface.sh` now **fails** if either SSH domain becomes permissive
+again, or if `chfn`/`chsh` reappear as setuid, so neither can silently regress.
 
 ### Dependency to keep in view
 
@@ -691,13 +744,44 @@ pretending otherwise would be the same overclaiming M4 spent its time deleting.
 - Losing the token does not brick the machine — there is a tested recovery path.
 - The whole flow works with **no network** and is tested that way.
 
+### Groundwork already surveyed (3 Aug 2026)
+
+Checked on a booted machine while closing the M4 items, so the first decisions
+start from facts rather than assumptions:
+
+- **PAM really is the common chokepoint.** `sudo`, `su`, `sshd`, `sddm` and
+  `login` all have stacks, and so does **polkit** — `polkit-agent-helper-1` links
+  `libpam` and its service file is `/usr/lib/pam.d/polkit-1`. Fedora keeps PAM
+  defaults under `/usr/lib/pam.d` with `/etc/pam.d` reserved for overrides, so
+  looking only in `/etc/pam.d` makes polkit appear not to use PAM at all. It
+  does. One stack edit can therefore cover the terminal and the desktop's
+  authorisation prompts together, which is exactly what the GUI-theatre warning
+  demands.
+- **No second-factor module ships in the image.** `pam_faillock` is present;
+  `pam_u2f`, `pam_oath`, `pam_pkcs11` and `pam_fprintd` are all absent. Both
+  candidates are layerable from Fedora: `pam-u2f` 1.4.0 and `libfido2` 1.16.0 for
+  FIDO2, `pam_oath` 2.6.14 plus `oathtool` for TOTP.
+- **`/etc/polkit-1/rules.d` exists** and is where a KotinosOS rule would live.
+- **The test VM cannot exercise FIDO2.** No `hidraw` device and no TPM: Hyper-V
+  Generation 2 offers no straightforward USB passthrough. TOTP can be tested end
+  to end in the VM today; FIDO2 cannot, and would need either a physical machine
+  or a software authenticator. This is a real constraint on the "proven by
+  trying it" exit criterion and should shape which factor is built first, rather
+  than being discovered halfway through.
+
 ### Steps
 
 - [ ] **Decide the enforcement point, and write down why** — the PAM stack is the
   likely answer, since `sudo`, `su`, `polkit` and the display manager all consult
   it, which makes it the one place a GUI cannot be walked around. An LSM is the
   heavier alternative. This decision gates everything else in the milestone and
-  must be made first
+  must be made first.
+  *Useful evidence from closing the M4 items:* the image can now modify SELinux
+  policy at build time and have it stick — the `ssh` module is rebuilt without
+  its permissive statements and the result verified on a booted machine. So
+  "policy layer" is a demonstrated capability here rather than an aspiration,
+  which makes an SELinux-backed component of the gate more credible than it
+  looked when the brief was written
 - [ ] **Choose the factor** — FIDO2 (`pam_u2f`) or TOTP (`pam_oath`), offline in
   both cases. FIDO2 is stronger and needs no clock; TOTP needs no hardware but
   **depends on the machine's time being right**, which on a desktop with a dead
@@ -728,26 +812,6 @@ pretending otherwise would be the same overclaiming M4 spent its time deleting.
   attacker after admin mode is legitimately granted, documenting exactly how much
   the safety net still resists. M4's answer was "everything held"; M5's answer
   will honestly be "less", and the number is worth knowing
-
-### Carried forward from M4
-
-- [ ] **Review the permissive SELinux domains** — forty ship permissive, and
-  `sshd_session_t` / `sshd_auth_t` handle SSH authentication, so the domains
-  guarding remote login are not confined on a machine that reports `Enforcing`.
-  Decide per domain which matter for an appliance, and make those enforcing with
-  whatever policy work that needs. This belongs with M5 because it is the same
-  question M5 exists to answer — who is allowed to do what, and how is that
-  boundary actually held rather than merely declared. Proving one of them
-  enforcing afterwards is the test, not the fact that `semanage` accepted the
-  change
-- [ ] **Decide on `auditd`** — currently absent. Denials reach the journal, but
-  there is no cross-boot trail and none of the audit tooling. An appliance that
-  is meant to be recoverable after a compromise probably wants the trail; weigh
-  that against the disk and noise it costs
-- [ ] **`chfn` and `chsh` remain setuid root** — recorded in
-  `tests/attack-surface.sh` as removal candidates. An appliance with one account
-  and a fixed shell has no real use for either, but removing them means touching
-  shadow-utils, which is a deliberate change with its own verification
 
 ### The connection worth keeping in view
 

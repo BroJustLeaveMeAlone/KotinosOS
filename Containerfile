@@ -412,6 +412,72 @@ RUN dnf install -y firewalld && dnf clean all && \
 # this project keeps hitting. fedora-bootc ships enforcing; this asserts it.
 RUN grep -q '^SELINUX=enforcing' /etc/selinux/config
 
+# Confine SSH authentication, which "SELinux is enforcing" does not cover.
+#
+# `getenforce` returns a single global answer to a per-domain question. Fedora's
+# policy ships 41 BUILTIN PERMISSIVE types, and inside a permissive domain the
+# policy still evaluates each access, still logs the denial, and then allows it
+# anyway. Two of those types -- sshd_session_t and sshd_auth_t -- are the domains
+# that handle SSH authentication, so on a machine reporting Enforcing, the code
+# authenticating remote logins was not confined at all.
+#
+# M4 found this by mislabelling a user's authorized_keys and watching sshd read
+# it regardless: the AVC said `permissive=1`, meaning "would have been denied".
+# With this step the same test is refused, and the AVC says `permissive=0`.
+#
+# WHY THE MODULE IS REBUILT RATHER THAN semanage permissive -d.
+# That command only removes types added with `semanage permissive -a`. Builtin
+# permissive types come from `(typepermissive x)` statements compiled into the
+# service's own policy module, and the removal fails with "Unable to remove
+# module permissive_sshd_session_t ... No such file or directory". The only way
+# to drop the statement is to install a corrected copy of the module at a higher
+# priority, which is what happens below.
+#
+# WHY THAT DOES NOT FREEZE SSH POLICY.
+# Overriding a module at priority 400 shadows the distribution's version at 100
+# forever, which on a package-updated system would mean silently ignoring every
+# future upstream fix to ssh policy -- worse than the problem being solved. It is
+# safe HERE only because this is an image-based OS: the override is re-derived
+# from whatever ssh module that build's selinux-policy shipped, on every single
+# build, and images are rebuilt rather than patched in place. The freeze lasts
+# exactly one image.
+#
+# Only these two types are touched. The other 39 were reviewed and deliberately
+# left alone: 22 label software this image does not install, and most of the rest
+# are systemd generators that run for milliseconds during early boot, where the
+# breakage risk is a machine that will not start and the security value is close
+# to nil. Verified on a booted VM that key login, scp, sftp and repeated sessions
+# all work with these two enforcing, and that no new enforced denial appears.
+RUN cd /tmp && \
+    semodule -c -E ssh && \
+    grep -v '(typepermissive sshd_session_t)' ssh.cil \
+      | grep -v '(typepermissive sshd_auth_t)' > ssh-enforcing.cil && \
+    mv ssh-enforcing.cil ssh.cil && \
+    semodule -X 400 -i ssh.cil && \
+    rm -f /tmp/ssh.cil && \
+    ! semanage permissive -l | grep -qE '^sshd_(session|auth)_t$'
+
+# Drop setuid from chfn and chsh.
+#
+# Both are setuid root so an ordinary user can edit their own /etc/passwd fields
+# -- chfn the display name, chsh the login shell. On a single-account appliance
+# with a fixed shell, neither is something anybody reaches for: the display name
+# belongs to the settings app, and changing the login shell is an admin-mode
+# decision if it is a decision at all.
+#
+# They are removed by clearing the setuid bit rather than by removing the
+# package, because shadow-utils also provides passwd, chage, gpasswd and newgrp,
+# which this system does need. The binaries stay and simply cannot escalate; a
+# user running them now gets a permission error rather than a root-owned write
+# to the account database.
+#
+# This is the smallest real reduction in attack surface available here, and the
+# reason it is worth taking is that setuid binaries are where privilege
+# escalation bugs live -- the value is not that these two have a known flaw, it
+# is that they no longer matter if one is found.
+RUN chmod u-s /usr/bin/chfn /usr/bin/chsh && \
+    ! find /usr/bin/chfn /usr/bin/chsh -perm /u+s | grep -q .
+
 # Optional development access. Empty in release builds.
 #
 # Fedora bootc places every account's home under /var (/root -> /var/roothome,

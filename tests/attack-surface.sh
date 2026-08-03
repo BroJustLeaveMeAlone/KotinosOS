@@ -50,8 +50,6 @@ read -r -d '' EXPECTED_SUID <<'EOF'
 /usr/bin/chage                    password ageing; ships with passwd
 /usr/bin/gpasswd                  group password management; ships with passwd
 /usr/bin/newgrp                   group switching; ships with passwd
-/usr/bin/chfn                     changes the GECOS field; CANDIDATE FOR REMOVAL, see note below
-/usr/bin/chsh                     changes the login shell; CANDIDATE FOR REMOVAL, see note below
 /usr/bin/mount                    non-root mounting of removable media
 /usr/bin/umount                   pairs with mount
 /usr/bin/mount.nfs                NFS mount helper; ships with util-linux
@@ -64,14 +62,11 @@ read -r -d '' EXPECTED_SUID <<'EOF'
 /usr/libexec/utempter/utempter    setgid utmp; terminal emulators record login sessions
 EOF
 
-# chfn and chsh are the two entries here that an appliance has the weakest case
-# for. Both are setuid root so a user can edit their own /etc/passwd fields, and
-# on a machine with one account and a fixed shell, neither is something the user
-# will ever reach for -- the settings app owns the display name. They are left
-# in place for now rather than removed on a hunch, because removing them means
-# touching the shadow-utils package rather than deleting a file, and that is a
-# deliberate change with its own verification. Recorded here so the decision is
-# a decision and not an oversight.
+# chfn and chsh USED to be in this list, flagged as the weakest case for an
+# appliance: setuid root so a user can edit their own /etc/passwd fields, on a
+# machine with one account and a fixed shell. They have since had the setuid bit
+# cleared in the Containerfile, so they should no longer appear at all -- if
+# either shows up as NEW below, that build step has stopped working.
 
 # ============================================================================
 # Expected listening sockets
@@ -310,9 +305,12 @@ report_permissive_domains() {
     # This is reported on every run rather than written down once, because a
     # caveat recorded in a document is a caveat nobody re-reads, and "SELinux is
     # enforcing" then quietly becomes a claim the system does not support.
-    # Informational, not a finding: these are upstream defaults, not something
-    # this image did, and failing the audit over them would train the reader to
-    # ignore it.
+    #
+    # The two SSH domains are a finding, because this image made them enforcing
+    # and their return is a regression. Every other permissive domain is
+    # informational: they are upstream defaults rather than something this image
+    # chose, and failing the audit over them would train the reader to skip the
+    # section that contains the SSH line.
     command -v semanage >/dev/null 2>&1 || return 0
 
     local perms
@@ -322,16 +320,35 @@ report_permissive_domains() {
     printf '\n  permissive domains: %s total (upstream defaults)\n' \
         "$(printf '%s\n' "${perms}" | grep -c .)"
 
-    # The ones worth a second look: anything that authenticates, faces the
-    # network, or guards a privilege boundary.
+    # The SSH authentication domains are ours to keep enforcing: the image
+    # rebuilds the ssh policy module without their permissive statements. If they
+    # come back, either that build step silently stopped working or a new
+    # Fedora policy renamed something, and either way the machine has quietly
+    # lost the confinement it claims. That is a finding, not a note.
+    local ssh_perm
+    ssh_perm="$(printf '%s\n' "${perms}" | grep -E '^sshd_(session|auth)_t$' || true)"
+    if [[ -n "${ssh_perm}" ]]; then
+        printf '  *** SSH auth domains are permissive again: %s ***\n' \
+            "$(printf '%s' "${ssh_perm}" | tr '\n' ' ')"
+        printf '  The Containerfile is supposed to rebuild the ssh module without\n'
+        printf '  their (typepermissive) statements. Check that step.\n'
+        findings=$(( findings + 1 ))
+    else
+        printf '  ok: sshd_session_t and sshd_auth_t are enforcing (image rebuilds the ssh module)\n'
+    fi
+
+    # The rest are upstream defaults. Reported rather than failed, because they
+    # are not something this image chose, and failing on them would train the
+    # reader to skip the section that contains the line above.
     local notable
-    notable="$(printf '%s\n' "${perms}" | grep -E 'ssh|polkit|logind|firewall|snapper|flatpak|passwd|sudo' || true)"
+    notable="$(printf '%s\n' "${perms}" \
+        | grep -E 'ssh|polkit|logind|firewall|snapper|flatpak|passwd|sudo' \
+        | grep -vE '^sshd_(session|auth)_t$' || true)"
     if [[ -n "${notable}" ]]; then
-        printf '  NOT CONFINED despite Enforcing, and security-relevant:\n'
+        printf '  still permissive upstream, and security-adjacent:\n'
         while IFS= read -r d; do
             [[ -n "${d}" ]] && printf '      %s\n' "${d}"
         done <<< "${notable}"
-        printf '  Reviewing these is carried forward to M5; see TODO.md.\n'
     fi
 }
 
