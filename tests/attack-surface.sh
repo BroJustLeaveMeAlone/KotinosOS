@@ -493,15 +493,32 @@ check_sudo_timestamp() {
         findings=$(( findings + 1 ))
     fi
 
-    if command -v secon >/dev/null 2>&1 || command -v ls >/dev/null 2>&1; then
-        local label
-        label="$(ls -Z "${oath}" 2>/dev/null | awk '{print $1}')"
-        if [[ "${label}" == *:shadow_t:* ]]; then
-            printf '  ok: TOTP secret is labelled shadow_t, not etc_t\n'
+    local label
+    label="$(ls -Z "${oath}" 2>/dev/null | awk '{print $1}')"
+    if [[ "${label}" == *:shadow_t:* ]]; then
+        printf '  ok: TOTP secret is labelled shadow_t, not etc_t\n'
+    else
+        printf '  *** TOTP secret label is %s ***\n' "${label:-unknown}"
+        printf '  Expected shadow_t. As etc_t it is readable by a wide set of\n'
+        printf '  confined domains, which is what the label is there to stop.\n'
+        findings=$(( findings + 1 ))
+    fi
+
+    # Recovery codes, when a user has enrolled. Absent is normal before
+    # enrolment, so only their protection is checked, never their existence.
+    local rec=/etc/kotinos/recovery-codes
+    if [[ -e "${rec}" ]]; then
+        local rmode rowner rlabel
+        rmode="$(stat -c '%a' "${rec}" 2>/dev/null)"
+        rowner="$(stat -c '%U:%G' "${rec}" 2>/dev/null)"
+        rlabel="$(ls -Z "${rec}" 2>/dev/null | awk '{print $1}')"
+        if [[ "${rmode}" == "600" && "${rowner}" == "root:root" && "${rlabel}" == *:shadow_t:* ]]; then
+            printf '  ok: recovery codes are 600 root:root and labelled shadow_t\n'
         else
-            printf '  *** TOTP secret label is %s ***\n' "${label:-unknown}"
-            printf '  Expected shadow_t. As etc_t it is readable by a wide set of\n'
-            printf '  confined domains, which is what the label is there to stop.\n'
+            printf '  *** recovery codes are %s %s %s ***\n' \
+                "${rmode}" "${rowner}" "${rlabel}"
+            printf '  Expected 600 root:root and shadow_t. These are what open\n'
+            printf '  admin mode when the second factor is unavailable.\n'
             findings=$(( findings + 1 ))
         fi
     fi

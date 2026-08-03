@@ -5,13 +5,13 @@
 # bumping to a new release.
 FROM quay.io/fedora/fedora-bootc:44
 
-# Identifies which build a running system came from. Milestone 1 proves
-# rollback by booting v1, upgrading to v2, rolling back, and reading this
-# file at each step to confirm which deployment is active.
-ARG BUILD_ID=dev
-
-RUN printf 'NAME="KotinosOS"\nID=kotinos\nBUILD_ID="%s"\nBASE="fedora-bootc:44"\n' "${BUILD_ID}" \
-      > /usr/lib/kotinos-release
+# NOTE: the BUILD_ID stamp is written at the END of this file, not here.
+# It changes on every build, and an ARG invalidates the layer cache from the
+# point it is used onwards -- so writing it first meant every build with a new
+# tag rebuilt all seventy-odd steps from scratch, including the several-hundred
+# package desktop install. Measured: one cached step out of seventy-three.
+# Writing it last lets everything above cache between builds. Nothing during the
+# build reads the file; its consumers are all at runtime.
 
 # The image builder generates /boot's mount unit with WantedBy=multi-user.target,
 # so /boot mounts roughly two minutes into boot. bootc needs /boot to write
@@ -590,15 +590,29 @@ RUN printf '# Written by the KotinosOS image. See the M5 notes in TODO.md.\n# su
 #
 # The empty file is harmless before enrolment: pam_oath finds no entry for the
 # user and denies, which is the direction a missing credential should fail.
+# The recovery codes get the same treatment. They are stored salted and hashed,
+# so reading the file does not hand over working codes the way reading
+# users.oath hands over the secret -- but they are still the thing that opens
+# admin mode when the phone is gone, and a file worth stealing offline is worth
+# labelling. Left alone it would be etc_t, verified.
 RUN dnf install -y pam_oath oathtool && dnf clean all && \
     test -f /usr/lib64/security/pam_oath.so && \
     command -v oathtool >/dev/null && \
     semanage fcontext -a -t shadow_t '/etc/users\.oath' && \
+    semanage fcontext -a -t shadow_t '/etc/kotinos/recovery-codes' && \
     touch /etc/users.oath && \
     chown root:root /etc/users.oath && \
     chmod 0600 /etc/users.oath && \
     test "$(matchpathcon -n /etc/users.oath | tr -d ' ')" = "system_u:object_r:shadow_t:s0" && \
+    test "$(matchpathcon -n /etc/kotinos/recovery-codes | tr -d ' ')" = "system_u:object_r:shadow_t:s0" && \
     test "$(stat -c '%a %U %G' /etc/users.oath)" = "600 root root"
+
+# The enrolment tool. Sets up the factor and can check a code; it deliberately
+# does not grant admin mode -- that is the next part of M5.
+COPY system-scripts/kotinos-admin.sh /usr/libexec/kotinos-admin
+RUN chmod 0755 /usr/libexec/kotinos-admin && \
+    ln -sf /usr/libexec/kotinos-admin /usr/bin/kotinos-admin && \
+    /usr/libexec/kotinos-admin --help >/dev/null
 
 # Optional development access. Empty in release builds.
 #
@@ -677,6 +691,18 @@ RUN find /usr/share/kotinos /usr/lib/kotinos /etc/kotinos \
                /etc/xdg/kdeglobals /etc/xdg/kwinrc && \
     chmod 0755 /usr/libexec/kotinos-* && \
     ! find /usr /etc -xdev -type f -perm /o+w -print | grep -q .
+
+# Identifies which build a running system came from. Milestone 1 proves
+# rollback by booting v1, upgrading to v2, rolling back, and reading this
+# file at each step to confirm which deployment is active.
+#
+# Deliberately the last thing written. See the note at the top of this file:
+# BUILD_ID changes every build, and an ARG invalidates the layer cache from
+# where it is used, so putting it first cost a full rebuild every single time.
+ARG BUILD_ID=dev
+RUN printf 'NAME="KotinosOS"\nID=kotinos\nBUILD_ID="%s"\nBASE="fedora-bootc:44"\n' "${BUILD_ID}" \
+      > /usr/lib/kotinos-release && \
+    grep -q "^BUILD_ID=\"${BUILD_ID}\"$" /usr/lib/kotinos-release
 
 # Fails the build if the result is not a valid bootc image.
 RUN bootc container lint
