@@ -311,11 +311,31 @@ report_permissive_domains() {
     # informational: they are upstream defaults rather than something this image
     # chose, and failing the audit over them would train the reader to skip the
     # section that contains the SSH line.
-    command -v semanage >/dev/null 2>&1 || return 0
+    # Both early exits below SAY they happened. They used to return silently,
+    # which was harmless while this section was informational and is not harmless
+    # now that it carries a regression check: `tests/README.md` tells people to
+    # run this audit as the ordinary user, and `semanage permissive -l` may not
+    # be able to read the policy store as non-root. A silent return would then
+    # skip the SSH check, print nothing at all for this section, and let the
+    # script finish with "No unexpected attack surface" -- reporting a clean
+    # audit for a check that never ran.
+    if ! command -v semanage >/dev/null 2>&1; then
+        printf '\n  NOT CHECKED: semanage is unavailable, so permissive domains\n'
+        printf '  could not be read. The SSH regression check did NOT run.\n'
+        findings=$(( findings + 1 ))
+        return 0
+    fi
 
     local perms
     perms="$(semanage permissive -l 2>/dev/null | grep -E '^[a-z_]+_t$' | sort)"
-    [[ -z "${perms}" ]] && return 0
+    if [[ -z "${perms}" ]]; then
+        printf '\n  NOT CHECKED: semanage returned no permissive types at all.\n'
+        printf '  Expected dozens on Fedora, so this is far more likely to be a\n'
+        printf '  permissions problem (run as root) than a policy with none.\n'
+        printf '  The SSH regression check did NOT run.\n'
+        findings=$(( findings + 1 ))
+        return 0
+    fi
 
     printf '\n  permissive domains: %s total (upstream defaults)\n' \
         "$(printf '%s\n' "${perms}" | grep -c .)"
@@ -335,6 +355,38 @@ report_permissive_domains() {
         findings=$(( findings + 1 ))
     else
         printf '  ok: sshd_session_t and sshd_auth_t are enforcing (image rebuilds the ssh module)\n'
+    fi
+
+    # The override module itself, not only its effect.
+    #
+    # The check above reads the policy the kernel loaded, which comes from the
+    # compiled policy under /etc and therefore survives into the booted system.
+    # `semodule` installs the priority-400 override into the policy STORE under
+    # /var/lib/selinux, and this image's /var does not survive first boot. So the
+    # two checks can disagree, and the disagreement is the interesting case: the
+    # domains read as enforcing while the store has no record of why.
+    #
+    # That state is not a problem until something rebuilds the policy, and then
+    # it is: `setsebool -P`, `semanage fcontext`, or any semodule operation
+    # regenerates the binary policy from the store, and a store holding only
+    # Fedora's priority-100 ssh module regenerates it WITH the permissive
+    # statements back in. The machine would return to unconfined SSH
+    # authentication as a side effect of an unrelated administrative command,
+    # with nothing in the journal naming it. Cheap to check, silent if missed.
+    local modules
+    modules="$(semodule -lfull 2>/dev/null || true)"
+    if [[ -z "${modules}" ]]; then
+        printf '  NOT CHECKED: could not list policy modules, so the priority-400\n'
+        printf '  ssh override could not be confirmed present (try as root).\n'
+    elif printf '%s\n' "${modules}" | grep -qE '^400[[:space:]]+ssh([[:space:]]|$)'; then
+        printf '  ok: the priority-400 ssh override is in the policy store\n'
+    else
+        printf '  *** the priority-400 ssh override is NOT in the policy store ***\n'
+        printf '  The domains are enforcing right now because the compiled policy\n'
+        printf '  under /etc survived, but the store cannot reproduce it. The next\n'
+        printf '  setsebool -P or semanage fcontext on this machine will rebuild\n'
+        printf '  from Fedora'\''s module and silently undo the confinement above.\n'
+        findings=$(( findings + 1 ))
     fi
 
     # The rest are upstream defaults. Reported rather than failed, because they

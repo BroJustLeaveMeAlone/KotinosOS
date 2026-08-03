@@ -448,14 +448,51 @@ RUN grep -q '^SELINUX=enforcing' /etc/selinux/config
 # breakage risk is a machine that will not start and the security value is close
 # to nil. Verified on a booted VM that key login, scp, sftp and repeated sessions
 # all work with these two enforcing, and that no new enforced denial appears.
+# The checks below are positive on purpose. `! semanage permissive -l | grep -q`
+# reads like an assertion and is not one: in a pipeline the `!` negates grep,
+# so a semanage that is missing or broken produces empty input, grep exits 1,
+# and the whole thing "passes" having verified nothing. Measured, not assumed --
+# with semanage stubbed out to exit 127, that form returns 0.
+#
+# A `command -v semanage` guard does not fix it either, since it is satisfied by
+# a semanage that exists and fails. So the step proves each stage did work:
+# that there were permissive statements to remove, that none remain in the file
+# written, and that semanage produced real output before its result is trusted.
+# The same checks cover a future Fedora renaming the types, where both greps
+# would silently match nothing and the old assertion would have passed.
+#
+# WHAT THIS STEP DOES NOT CARRY ONTO THE RUNNING MACHINE.
+# semodule installs into the policy store under /var/lib/selinux, and this
+# image's /var does not survive first boot -- the same property that forces
+# account creation into kotinos-firstboot rather than the build. What does
+# survive is the COMPILED policy under /etc/selinux/targeted/policy, so the
+# machine boots with both domains enforcing and the assertions here stay true of
+# the booted system.
+#
+# The part at risk is the ability to REBUILD that policy. A store missing the
+# priority-400 override rebuilds from Fedora's priority-100 ssh module, which
+# still carries the permissive statements -- so the first `setsebool -P` or
+# `semanage fcontext` run on the machine would put both domains quietly back to
+# permissive, with nothing in the journal to say so. M5 is a milestone full of
+# exactly that kind of command, which is why tests/attack-surface.sh checks for
+# the override module itself and not only for its effect.
 RUN cd /tmp && \
     semodule -c -E ssh && \
+    test "$(grep -c '(typepermissive sshd_' ssh.cil)" -gt 0 && \
     grep -v '(typepermissive sshd_session_t)' ssh.cil \
       | grep -v '(typepermissive sshd_auth_t)' > ssh-enforcing.cil && \
+    test "$(grep -c '(typepermissive sshd_' ssh-enforcing.cil)" -eq 0 && \
     mv ssh-enforcing.cil ssh.cil && \
     semodule -X 400 -i ssh.cil && \
     rm -f /tmp/ssh.cil && \
-    ! semanage permissive -l | grep -qE '^sshd_(session|auth)_t$'
+    semodule -lfull > /tmp/modules.txt && \
+    test -s /tmp/modules.txt && \
+    grep -qE '^400[[:space:]]+ssh([[:space:]]|$)' /tmp/modules.txt && \
+    rm -f /tmp/modules.txt && \
+    semanage permissive -l > /tmp/permissive.txt && \
+    test -s /tmp/permissive.txt && \
+    ! grep -qE '^sshd_(session|auth)_t$' /tmp/permissive.txt && \
+    rm -f /tmp/permissive.txt
 
 # Drop setuid from chfn and chsh.
 #
@@ -465,11 +502,17 @@ RUN cd /tmp && \
 # belongs to the settings app, and changing the login shell is an admin-mode
 # decision if it is a decision at all.
 #
-# They are removed by clearing the setuid bit rather than by removing the
-# package, because shadow-utils also provides passwd, chage, gpasswd and newgrp,
-# which this system does need. The binaries stay and simply cannot escalate; a
-# user running them now gets a permission error rather than a root-owned write
-# to the account database.
+# They are neutralised by clearing the setuid bit rather than by removing the
+# package, because `rpm -qf` puts both in **util-linux** -- the package that also
+# supplies mount, umount, lsblk, findmnt and most of the tools this image depends
+# on to boot. Removing it to be rid of two setuid binaries is not a trade
+# anybody would take. (Not shadow-utils, which owns passwd, chage, gpasswd and
+# newgrp; and not util-linux-user, which is where these live on some other
+# Fedora variants. Checked on the image rather than assumed, because both of
+# those were guessed wrong first.)
+#
+# The binaries stay and simply cannot escalate; a user running them now gets a
+# permission error rather than a root-owned write to the account database.
 #
 # This is the smallest real reduction in attack surface available here, and the
 # reason it is worth taking is that setuid binaries are where privilege

@@ -656,6 +656,21 @@ value is close to nil. Only four permissive domains have a live process at all:
 the two SSH ones now fixed, plus `switcheroo_control_t` and `systemd_oomd_t`,
 both local and unprivileged.
 
+**One caveat this carries into M5, and it is M5-shaped.** `semodule` installs the
+priority-400 override into the policy *store* under `/var/lib/selinux`, and this
+image's `/var` does not survive first boot — the same property that forces
+account creation into `kotinos-firstboot`. The *compiled* policy under `/etc`
+does survive, so the booted machine is genuinely enforcing and every check above
+is true of it. What may not survive is the ability to **rebuild** that policy: a
+store holding only Fedora's priority-100 `ssh` module regenerates it with the
+permissive statements back in. So `setsebool -P`, `semanage fcontext`, or any
+`semodule` call could undo the confinement as a side effect of an unrelated
+command, silently. M5 is full of exactly those commands, which is why
+`tests/attack-surface.sh` now checks for the override module itself and not only
+for its effect, and why the build asserts the module landed at priority 400.
+Whether the store actually survives is a fact to establish on the next VM run
+rather than a thing to assume in either direction.
+
 #### `auditd`: not installed, and the reason M4 gave was wrong
 
 M4 recorded the gap as "no cross-boot trail". There is one — `/var/log/journal`
@@ -676,13 +691,22 @@ trade-off, not a security boundary.
 Both were setuid root so a user could edit their own `/etc/passwd` fields. On a
 single-account appliance with a fixed shell, the display name belongs to the
 settings app and the login shell is an admin-mode decision. The setuid bit is
-cleared rather than the package removed, since shadow-utils also provides
-`passwd`, `chage`, `gpasswd` and `newgrp`. The value is not that these two have
-a known flaw — it is that they stop mattering if one is found. The setuid count
-drops from 18 to 16.
+cleared rather than the package removed, because `rpm -qf` puts both in
+**util-linux** — the package that also supplies `mount`, `umount`, `lsblk` and
+`findmnt`, so removing it to be rid of two setuid binaries is not a trade
+anybody would take. Worth recording that this was guessed wrong twice before it
+was checked: neither shadow-utils (which owns `passwd`, `chage`, `gpasswd` and
+`newgrp`) nor util-linux-user (where these live on some other Fedora variants)
+is the answer here. The value is not that these two have a known flaw — it is
+that they stop mattering if one is found. The setuid count drops from 18 to 16.
 
 `tests/attack-surface.sh` now **fails** if either SSH domain becomes permissive
-again, or if `chfn`/`chsh` reappear as setuid, so neither can silently regress.
+again, if the priority-400 override goes missing from the policy store, or if
+`chfn`/`chsh` reappear as setuid, so none of the three can silently regress. It
+also fails if it could not *run* the SSH check at all — an audit that skips its
+own regression guard in silence and then prints "No unexpected attack surface"
+is the failure mode worth guarding hardest, since it reports a clean result for
+a check that never happened.
 
 ### Dependency to keep in view
 
