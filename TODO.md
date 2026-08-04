@@ -1244,6 +1244,38 @@ working version reads `-o short-unix` and compares epoch seconds numerically in
 `awk`, which cannot be ambiguous. Recorded because the two forms that failed are
 the two any reasonable person would reach for first.
 
+#### Two failed units on a fresh boot, neither from M5
+
+The final verification counted failed units and found two. Both predate this
+milestone and were only noticed because something finally counted them.
+
+**`vault.mount`** is tried early in boot, before `kotinos-vault-seal` runs, and
+fails with *"mount point does not exist"* — correctly, since `/vault` does not
+exist and must not. The seal then masks it, and the vault ends up unmounted,
+which is the goal. But the attempt left a permanent entry in
+`systemctl --failed`, and a failed unit that is always there teaches whoever
+reads that list to ignore it. The seal service now clears the state it caused,
+with the masking still doing the actual work.
+
+**`systemd-random-seed.service`** fails on the *first* boot only:
+
+```
+Failed to create directory /var/lib/systemd/random-seed: Permission denied
+avc: denied { add_name } comm="systemd-random-" name="lib"
+  scontext=...:init_t tcontext=...:unlabeled_t permissive=0
+```
+
+`/var` is still `unlabeled_t` that early on a machine whose `/var` was created
+from scratch, so SELinux refuses the write. It corrects itself — a restart
+succeeds and `/var/lib/systemd` is properly labelled afterwards — so the visible
+cost is that the random seed is not carried across that one boot. Left as a
+finding rather than fixed, because the fix is about *when* `/var` gets relabelled
+during first boot, which is a different piece of work from admin mode.
+
+Worth noting the earlier `m5b` run reported zero failed units, which is why this
+surfaced only at the end: by then the box had been up long enough, and had been
+poked at enough, that neither state was still showing.
+
 #### An unrelated find: every build was rebuilding everything
 
 `ARG BUILD_ID` was consumed at step 3, and an `ARG` invalidates the layer cache

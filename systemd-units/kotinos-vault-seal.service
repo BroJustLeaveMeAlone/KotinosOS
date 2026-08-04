@@ -34,6 +34,20 @@ ExecStart=-/bin/sh -c 'ln -sf /dev/null /etc/systemd/system/vault.mount'
 ExecStart=-/usr/bin/systemctl daemon-reload
 ExecStart=-/bin/sh -c 'mountpoint -q /run/kotinos-vault && umount /run/kotinos-vault || true'
 
+# Clear vault.mount's failed state after masking it.
+#
+# The generated unit is tried early in boot, before this service runs, and it
+# fails -- correctly, because /vault does not exist and must not. The vault ends
+# up unmounted, which is the whole point, but the attempt leaves a permanent
+# entry in `systemctl --failed`.
+#
+# That matters more than tidiness. A failed unit that is always there teaches
+# whoever reads that list to ignore it, and the list is where a genuinely broken
+# service would appear. Clearing a failure we caused on purpose keeps the signal
+# worth reading. The masking above is what actually stops the mount; this only
+# tidies the record of an attempt that was always going to fail.
+ExecStart=-/usr/bin/systemctl reset-failed vault.mount
+
 # Prove it worked. If the vault is still mounted after all of the above, the
 # protection this whole design rests on is absent, and that must be visible in
 # the journal rather than assumed.
