@@ -1062,41 +1062,135 @@ same flow rather than being bolted on afterwards.
   `auth_admin_keep`. Each of those three guards was tested by breaking the thing
   it guards
 - [x] **Choose the factor** — decided below: **TOTP first, FIDO2 supported.**
-- [ ] **Protect the TOTP secret at rest** — the obligation the factor decision
-  takes on. `/etc/users.oath` is a shared secret on the machine it defends, so
-  root-only ownership is asserted at build time and probed in `tests/`, and the
-  SELinux backstop confines *which domain* may read it rather than only which
-  user. The test that matters is an ordinary user, and then a confined service,
-  both failing to read it — M4's world-writable finding is what makes this a real
-  requirement rather than a formality
-- [ ] **Enrolment, and the recovery path that has to exist** — an offline second
-  factor with no recovery is a machine one lost key away from being scrap, and
-  with TOTP there are now two ways to get there: a lost phone, and a clock wrong
-  enough that valid codes are rejected. Print or write recovery codes at
-  enrolment, decide where they live (the vault is tempting and is *unmounted*
-  precisely when needed, so probably not), and test the path by actually losing
-  the factor — including the dead-clock case, by setting the clock wrong and
-  confirming recovery still works
-- [ ] **Wire the existing escalation hook in as blocking** — `kotinos-escalate`
-  already pins the deployment and snapshots `/var`, and already exits non-zero
-  when either fails. M2 built it; M5 is what finally calls it. The gate must
-  treat a non-zero exit as "do not open the door", which is the behaviour that
-  script's own header has been asking for since it was written
-- [ ] **Time-box the unlocked state** — admin mode that stays open until reboot
-  is admin mode that is always open. Decide the window, relock on idle and on
-  session end, and make the current state visible so nobody is unknowingly root
-- [ ] **Record what admin mode did** — the point of the safety capture is being
-  able to undo a session; that is far easier when there is a log of what
-  happened during it. Ties directly to the `auditd` decision below
+- [x] **Protect the TOTP secret at rest** — `/etc/users.oath` is created by the
+  image at `0600 root:root` and labelled `shadow_t` rather than `etc_t`, both
+  asserted at build time and probed on the running machine. Created in the image
+  rather than at enrolment so the protection exists from first boot instead of
+  depending on a tool getting it right unattended. Verified: an ordinary user is
+  refused on both the secret and the recovery codes
+- [x] **Enrolment, and the recovery path that has to exist** — `kotinos-admin
+  enroll` writes the secret and prints ten recovery codes once. Codes are salted
+  and hashed so reading the file yields nothing usable, consumed on use, and
+  accepted case-insensitively because people type what they read. **The
+  dead-clock case is tested, not assumed**: with the clock wound back to 2020 a
+  stale TOTP is correctly rejected while a recovery code still opens the door
+- [x] **Wire the existing escalation hook in as blocking** — done, and confirmed
+  on the VM: unlocking produced a snapshot described *"pre-escalation: admin mode
+  unlock by kotinos"* and a pinned deployment. A non-zero exit from
+  `kotinos-escalate` means the grant is not written and the door does not open
+- [x] **Time-box the unlocked state** — a fifteen-minute grant, checked on every
+  attempt rather than scheduled, so expiry needs nothing pushed out to processes
+  already running. `kotinos-admin status` shows the time left. Verified by
+  winding a grant's expiry into the past and watching the next `sudo` refuse
+- [~] **Record what admin mode did** — unlock and lock are logged to the journal
+  via `logger`, which is enough to answer *when* admin mode was open and for
+  whom. What happened *during* it is not recorded, and that is the part the
+  `auditd` decision was deferred to. Still open
 - [ ] **The restricted surface stays restricted** — M3 already limits the settings
   app via Plasma's Kiosk framework. Verify that the full control panel is
   genuinely unreachable while locked, rather than merely unlisted
-- [ ] **The adversarial test grows a second half** — `tests/adversarial-user.sh`
-  currently attacks as an ordinary user. Add the case that matters here: an
-  attacker **with the password** and **without the token**, then the same
-  attacker after admin mode is legitimately granted, documenting exactly how much
-  the safety net still resists. M4's answer was "everything held"; M5's answer
-  will honestly be "less", and the number is worth knowing
+- [~] **The adversarial test grows a second half** — `tests/adversarial-admin.sh`
+  written: it attacks *with* admin mode open and is mostly a list of things that
+  succeed, because that is the truth. Not yet run on a clean image
+- [x] **Put the gate in front of both paths to root** — `sudo` via a `pam_exec`
+  helper in its auth stack, and polkit via a rule consulting the same check, so
+  the two cannot drift into different answers. Both verified on a booted machine
+
+### Building it: what the machine said (4 Aug 2026)
+
+The design above survived contact largely intact. What follows is the part worth
+keeping — the things that were wrong, the things that were invisible, and the
+two places where the obvious implementation was the broken one.
+
+#### The gate is in sudo's PAM stack, and `seteuid` is load-bearing
+
+`pam_exec` runs the helper as the **invoking user** unless told otherwise. The
+grant was `0600 root:root`, so the helper could not read it, so the gate refused
+every attempt — including ones with a perfectly valid grant. It presented as a
+PAM malfunction rather than a permissions problem, which cost the most time of
+anything in this milestone.
+
+Compounding it: **sudo renders any failed auth module as `PAM authentication
+error: Unknown error -1`**, which reads like something broken rather than like a
+refusal. It is not. `pam_exec /bin/false` produces exactly the same message.
+Isolated by running the same stack against `/bin/true` and `/bin/false` until the
+message stopped being mysterious.
+
+#### The bootstrap: opening admin mode needs root, and root needs admin mode
+
+Resolved with a sudoers rule rather than an exception inside the gate, because
+**NOPASSWD makes sudo skip its PAM auth stack entirely** — measured at zero stack
+executions, not assumed. So the unlock helper is reachable without a grant and
+nothing else is.
+
+NOPASSWD is not unauthenticated: the helper demands the password *and* the
+factor itself. Passwords go through `unix_chkpwd`, the helper PAM itself uses, so
+this asks the same question the rest of the system asks rather than
+re-implementing shadow parsing. It also refuses everything for a locked account,
+which is a freshly provisioned machine's state — so admin mode cannot be opened
+before the user has a password at all.
+
+#### polkit failed with no error anywhere, because a `dontaudit` rule hid it
+
+The desktop half returned nothing useful and logged nothing — not in the journal,
+not in `ausearch`. `polkit.spawn` of `/bin/true` worked, so spawning was fine;
+spawning the grant checker did not. The denial only appeared after `semodule -DB`
+turned dontaudit off:
+
+```
+avc: denied { read } comm="bash" name="admin-grant"
+  scontext=...:policykit_t  tcontext=...:var_run_t  permissive=0
+```
+
+`polkitd` runs unprivileged in `policykit_t` and simply could not read the grant.
+This is the failure mode to remember: a policy problem that presents as *"the
+code does not work and there is no error"*.
+
+Fixed with `kotinos-adminmode.cil` — the grant gets a type of its own and exactly
+`policykit_t` is allowed to read it, rather than opening up `var_run_t` and
+handing polkit every runtime state file on the system. This is the concrete form
+of "SELinux protects the grant" that the enforcement decision promised.
+
+#### The grant is `0644`, and that is deliberate
+
+It looks like the wrong direction and is not. `polkitd` cannot read a root-only
+file whatever SELinux permits, so `0600` would leave the desktop half failing
+closed forever against a grant it had legitimately been given.
+
+The property that matters here is **integrity, not secrecy**. Knowing admin mode
+is open tells an attacker nothing they could not learn by trying `sudo`. Being
+able to *write* the file would hand them root outright. So: readable,
+root-writable only, and SELinux narrows the read side to one domain.
+
+#### What the polkit rule returns, and why not `NOT_HANDLED`
+
+When admin mode is closed the rule returns `NO`, not `NOT_HANDLED`. Falling
+through would reach a default of `auth_admin` — a password prompt that would then
+succeed, when the entire point is that the password alone is not enough.
+Observed directly, since `pkcheck` prints the result it cannot satisfy:
+
+| state | result |
+|---|---|
+| closed | `polkit\56result=no` |
+| open | `polkit\56result=auth_self` |
+| expired | `polkit\56result=no` |
+| an ungated action | `polkit\56result=auth_admin` (untouched) |
+
+That last row is the one that keeps the appliance usable: joining a wifi network,
+changing brightness and mounting a USB stick are deliberately not gated, because
+an appliance demanding admin mode to mount a memory card is broken rather than
+secure.
+
+#### An unrelated find: every build was rebuilding everything
+
+`ARG BUILD_ID` was consumed at step 3, and an `ARG` invalidates the layer cache
+from where it is used — so changing the tag discarded all seventy-odd steps
+including the several-hundred-package desktop install. Measured at **one cached
+step out of seventy-three**. Nothing during the build reads that file; every
+consumer is at runtime.
+
+Moved to the end. The next build cached **66 steps and reached step 77 of 80 in
+forty seconds**, against roughly forty minutes before.
 
 ### The connection worth keeping in view
 

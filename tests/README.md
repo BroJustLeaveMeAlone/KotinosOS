@@ -36,8 +36,16 @@ code, because the code says what it intends.
 | Script | Claim it tests | Needs |
 |---|---|---|
 | `adversarial-user.sh` | A hostile process at the ordinary user's privilege cannot delete the snapshots, reach the vault, read another user's data, or switch off the safety services. | Booted VM, ordinary user |
-| `attack-surface.sh` | Nothing is setuid or listening that has not been justified in writing. | Booted VM (the setuid section also runs against the container image) |
+| `adversarial-admin.sh` | The honest cost of admin mode: what an attacker can do *once it is open*, and the few things that still resist. | Booted VM, ordinary user, admin mode unlocked |
+| `attack-surface.sh` | Nothing is setuid or listening that has not been justified in writing, and the privilege gate's preconditions still hold. | Booted VM (the setuid section also runs against the container image) |
 | `sandbox-confinement.sh` | A Flatpak without filesystem permission cannot read `~/.ssh` or `Documents`, and can once granted. | Booted VM, ordinary user, network on first run |
+
+The two adversarial scripts are a pair and should be read that way.
+`adversarial-user.sh` is mostly a list of things that fail, and its answer is 20
+of 20. `adversarial-admin.sh` is mostly a list of things that **succeed**,
+because admin mode grants root and that is what it is for. A security model that
+only publishes its wins is marketing, so the second half exists to state the
+price of the first half's boundary in the same detail.
 
 ## Running them
 

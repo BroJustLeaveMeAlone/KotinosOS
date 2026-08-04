@@ -58,6 +58,7 @@ Full technical detail lives in [`PLAN.md`](./PLAN.md).
 | `desktop-config/` | Desktop defaults: settings restrictions, window behaviour, boot splash. |
 | `branding/` | Logo and brand assets. |
 | `tests/` | Adversarial and audit scripts, run against a booted VM. Deliberately **not** installed into the image — an attack script on every release machine helps only the attacker. |
+| `docs/engineering-log.md` | How the work actually went: the wrong turns, the assumptions that proved false, and the defects that read correctly and did nothing. |
 | `build.sh` | Builds the image and converts it to a bootable disk image. |
 | `build-output/` | Generated disk images (not committed). |
 | `PLAN.md` | Architecture, milestones, and design decisions. |
