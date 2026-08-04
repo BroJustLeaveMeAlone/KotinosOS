@@ -349,7 +349,7 @@ it tests *specific* claims adversarially, the way M1 tested rollback and M2 ran
   and `init_t` refused `add_name`, both on `unlabeled_t`. See the caveat below:
   "enforcing" is true globally and is not true of every domain.)*
 - ✅ A hostile process running *as the ordinary user* cannot delete snapshots or
-  reach the vault — proven by running one. *(20/20 boundaries held. It did not
+  reach the vault — proven by running one. *(22/22 boundaries held. It did not
   hold on the first run: see the snapper finding below, which is the single most
   valuable thing this milestone produced.)*
 - ✅ The firewall is default-deny inbound, and release images expose no
@@ -367,7 +367,7 @@ it tests *specific* claims adversarially, the way M1 tested rollback and M2 ran
 - [x] **Kernel / sysctl hardening** — `90-kotinos-sysctl.conf` covers pointer and log exposure, ptrace scope, unprivileged BPF and runtime kernel loading. Unprivileged user namespaces are deliberately left enabled and documented: Flatpak and bubblewrap build their sandboxes out of exactly that feature. The audit confirmed the payoff from the other side — `bwrap` is **not** setuid on this image, so keeping user namespaces removes a setuid binary rather than adding risk
 - [x] **systemd service hardening sweep** — confinement applied across the KotinosOS services, with every omission carrying its reason. Two are load-bearing: `kotinos-vault-seal.service` gets **no** sandboxing at all, because any sandbox option puts it in a private mount namespace with slave propagation, so its system-wide `umount /vault` would succeed only inside its own view and the journal would print "vault sealed" over a vault that was still mounted and writable. `kotinos-hardware-tune.service` leaves `ProtectKernelTunables` unset, because it would pass today and silently swallow the first setting the service is ever taught to apply live
 - [x] **Attack-surface audit** — `tests/attack-surface.sh`, clean on the VM. 18 setuid binaries, each justified in writing; every listener either loopback, deliberately-open `mdns`, or dev-only `sshd`. Written as a regression guard rather than a one-off: anything new fails the run until someone writes down why it is there. It found two real defects of its own (LLMNR, and world-writable unit files)
-- [x] **The adversarial test (the centrepiece)** — `tests/adversarial-user.sh`, run on a booted VM as the real primary account: **20 boundaries held, 2 allowed by design, 0 wrong.** Deliberately not baked into the image. Its first run was not clean, and that is the point — it found the snapper hole below
+- [x] **The adversarial test (the centrepiece)** — `tests/adversarial-user.sh`, run on a booted VM as the real primary account: **22 boundaries held, 2 allowed by design, 0 wrong.** Deliberately not baked into the image. Its first run was not clean, and that is the point — it found the snapper hole below
 
 ### Findings (27 Jul 2026)
 

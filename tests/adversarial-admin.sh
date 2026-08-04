@@ -4,7 +4,7 @@
 # actually open?
 #
 # The first half (adversarial-user.sh) asks whether the ordinary user's boundary
-# holds. Its answer is 20 of 20. This half asks the question that matters next,
+# holds. Its answer is 22 of 22. This half asks the question that matters next,
 # and the honest answer is much worse -- which is exactly why it is written down
 # rather than left implied.
 #
