@@ -24,7 +24,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ✅ **Core complete** (22 Jul 2026) — wizard outstanding |
 | M3.5 | Identity & comfort — look, motion, personalization, friction removal | 🚧 **In progress** — splash, windows, comfort features done |
 | M4 | Sandboxing & hardening | ✅ **Complete** (27 Jul 2026) — all four exit criteria met on a clean image; 22/22 adversarial boundaries hold. Eight defects found and fixed, two of which let an unprivileged user attack the safety net |
-| M5 | Admin mode & offline 2FA | 🚧 **In progress** — enforcement point decided (3 Aug 2026): PAM is the gate, `sudoers` + a polkit rule apply it, SELinux protects the grant. Factor choice next |
+| M5 | Admin mode & offline 2FA | 🚧 **Core complete** (4 Aug 2026) — both paths to root gated behind password + TOTP + a deliberate unlock, verified on a clean image; a correct password alone gets nothing. UI and the during-session audit trail outstanding |
 | M6 | AI assistant (+ M6b semantic file layer) | ⬜ Not started |
 | M7 | Distribution infrastructure | ⬜ Not started |
 | M8 | Hardware QA & v1.0 | ⬜ Not started |
@@ -1089,9 +1089,16 @@ same flow rather than being bolted on afterwards.
 - [ ] **The restricted surface stays restricted** — M3 already limits the settings
   app via Plasma's Kiosk framework. Verify that the full control panel is
   genuinely unreachable while locked, rather than merely unlisted
-- [~] **The adversarial test grows a second half** — `tests/adversarial-admin.sh`
-  written: it attacks *with* admin mode open and is mostly a list of things that
-  succeed, because that is the truth. Not yet run on a clean image
+- [x] **The adversarial test grows a second half** — `tests/adversarial-admin.sh`,
+  run on `m5b`: **12 allowed, 2 blocked.** Mostly a list of things that succeed,
+  because admin mode grants root and that is what it is for. The two that resist
+  are writing into `/usr` and making it permanently writable — bootc keeps the
+  running deployment read-only, and root is not enough to change the OS in place.
+  The uncomfortable ones are recorded rather than glossed: the TOTP secret is
+  readable once admin mode is open, so one compromised session can mint second
+  factors indefinitely and nothing prompts a re-enrol; and admin mode can extend
+  its own grant and edit its own gate, so expiry bounds forgetfulness rather than
+  an adversary already inside
 - [x] **Put the gate in front of both paths to root** — `sudo` via a `pam_exec`
   helper in its auth stack, and polkit via a rule consulting the same check, so
   the two cannot drift into different answers. Both verified on a booted machine
@@ -1180,6 +1187,27 @@ That last row is the one that keeps the appliance usable: joining a wifi network
 changing brightness and mounting a USB stick are deliberately not gated, because
 an appliance demanding admin mode to mount a memory card is broken rather than
 secure.
+
+#### Verified on a clean image (`m5b`, 4 Aug 2026)
+
+Everything above was built through `bootc usr-overlay`, which is transient by
+design, so none of it counted until an image booted with the gate baked in. 28
+checks on `m5b`, 0 failures:
+
+- the gate helper, the PAM line (first among `auth` rules, with `seteuid`), the
+  unlock sudoers rule, the polkit rule, the SELinux module at priority 400 and
+  the grant's file context all come from the build
+- **a correct password alone returns nothing**, and polkit answers
+  `result=no` — the milestone's headline criterion, from a machine nobody touched
+- both factors open it; the escalation snapshot is taken and the deployment
+  pinned before the grant is written; `sudo` then returns root and polkit answers
+  `result=auth_self`
+
+- either factor alone writes no grant
+- `lock` and expiry each close it again
+- a recovery code works as the second factor
+- no failed units, SSH domains still enforcing, setuid still 16, no
+  world-writable files, `users.oath` still `shadow_t`
 
 #### An unrelated find: every build was rebuilding everything
 
