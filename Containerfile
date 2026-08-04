@@ -659,6 +659,24 @@ RUN install -d /usr/share/kotinos && \
     chmod 0440 /etc/sudoers.d/20-kotinos-admin-unlock && \
     visudo -c -q
 
+# The desktop half of the gate, and the SELinux type that lets polkit read the
+# grant at all.
+#
+# polkitd runs unprivileged, in policykit_t, and the grant sits on /run. Without
+# a type of its own the read is denied -- and that denial is invisible, because
+# a dontaudit rule suppresses it: the polkit rule simply failed with nothing in
+# the journal until `semodule -DB` revealed it. The module grants exactly
+# policykit_t read access to exactly this file, rather than opening up var_run_t
+# and handing polkit every runtime state file on the system.
+COPY desktop-config/hardening/kotinos-adminmode.cil /usr/share/kotinos/kotinos-adminmode.cil
+COPY desktop-config/50-kotinos-adminmode.rules /etc/polkit-1/rules.d/50-kotinos-adminmode.rules
+RUN semodule -X 400 -i /usr/share/kotinos/kotinos-adminmode.cil && \
+    semodule --list=full | grep -qE '^400[[:space:]]+kotinos-adminmode' && \
+    semanage fcontext -a -t kotinos_admin_grant_t '/run/kotinos/admin-grant' && \
+    test "$(matchpathcon -n /run/kotinos/admin-grant | tr -d ' ')" = \
+         "system_u:object_r:kotinos_admin_grant_t:s0" && \
+    chmod 0644 /etc/polkit-1/rules.d/50-kotinos-adminmode.rules
+
 # Optional development access. Empty in release builds.
 #
 # Fedora bootc places every account's home under /var (/root -> /var/roothome,

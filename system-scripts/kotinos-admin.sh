@@ -255,15 +255,30 @@ do_verify() {
 #
 # Checking a timestamp instead means expiry needs nothing pushed anywhere.
 
+# The grant is READABLE and root-writable, which is deliberate and worth
+# explaining because 0600 looks more secure and is wrong here.
+#
+# Both paths to root consult this file. The PAM helper runs as root and could
+# read it either way. polkit cannot: polkitd runs as an unprivileged user, so a
+# 0600 file is unreadable to it no matter what SELinux permits, and the polkit
+# half of the gate would fail closed forever -- locking the desktop out of admin
+# mode it had legitimately been granted.
+#
+# The property that matters here is integrity, not secrecy. Knowing admin mode
+# is open tells an attacker nothing they could not learn by trying sudo. Being
+# able to WRITE this file would hand them root outright. So it is readable, and
+# writable by nobody but root, and SELinux narrows the read side further: the
+# kotinos-adminmode policy module gives the file its own type and allows exactly
+# policykit_t to read it, rather than opening up /run generally.
 write_grant() {
     local user="$1" now expiry
     now="$(date +%s)"
     expiry=$(( now + GRANT_SECONDS ))
-    install -d -m 0700 "${GRANT_DIR}"
+    install -d -m 0755 "${GRANT_DIR}"
     printf 'user=%s\ngranted=%s\nexpires=%s\n' "${user}" "${now}" "${expiry}" \
         > "${GRANT_FILE}"
     chown root:root "${GRANT_FILE}"
-    chmod 0600 "${GRANT_FILE}"
+    chmod 0644 "${GRANT_FILE}"
     command -v restorecon >/dev/null 2>&1 && restorecon -F "${GRANT_FILE}" 2>/dev/null
     printf '%s' "${expiry}"
 }

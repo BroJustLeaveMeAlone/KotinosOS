@@ -1,0 +1,61 @@
+// KotinosOS: administrative polkit actions require admin mode.
+//
+// This is the desktop half of the gate. sudo is covered by a PAM helper; without
+// this, someone who could not get root in a terminal could still reach the same
+// power through the desktop's authorisation prompts -- which is the GUI-theatre
+// trap the milestone brief warns about, arriving from the opposite direction.
+//
+// Both halves consult the SAME check (`kotinos-admin check`), so they cannot
+// drift into two different answers about whether admin mode is open.
+//
+// polkit.spawn throws when the command exits non-zero, so the try/catch IS the
+// grant test: no grant, an expired grant, a grant for a different user, or a
+// checker that cannot run all end in the catch and refuse.
+//
+// Returning NO rather than NOT_HANDLED matters. NOT_HANDLED would fall through
+// to the default, which for most of these actions is auth_admin -- a password
+// prompt that would then succeed. The whole point is that the password alone is
+// not enough while admin mode is closed.
+
+polkit.addRule(function(action, subject) {
+    // Only administrative actions. Everything a person does on their own
+    // machine day to day -- joining a wifi network, adjusting brightness,
+    // mounting a USB stick they just plugged in -- is left alone, because an
+    // appliance that demands admin mode to mount a memory card is broken rather
+    // than secure.
+    var gated = [
+        "org.freedesktop.systemd1.manage-units",
+        "org.freedesktop.systemd1.manage-unit-files",
+        "org.freedesktop.systemd1.reload-daemon",
+        "org.freedesktop.packagekit.package-install",
+        "org.freedesktop.packagekit.package-remove",
+        "org.freedesktop.packagekit.system-update",
+        "org.freedesktop.packagekit.system-sources-configure",
+        "org.freedesktop.NetworkManager.settings.modify.system",
+        "org.freedesktop.hostname1.set-static-hostname",
+        "org.freedesktop.udisks2.modify-device",
+        "org.freedesktop.udisks2.open-device"
+    ];
+
+    if (gated.indexOf(action.id) < 0) {
+        return polkit.Result.NOT_HANDLED;
+    }
+
+    // Someone outside wheel has no route to admin mode at all, so leave them to
+    // the default rather than pretending this rule is what stopped them.
+    if (!subject.isInGroup("wheel")) {
+        return polkit.Result.NOT_HANDLED;
+    }
+
+    try {
+        polkit.spawn(["/usr/libexec/kotinos-admin", "check", subject.user]);
+    } catch (e) {
+        return polkit.Result.NO;
+    }
+
+    // Admin mode is open. Still ask for the password: an unlocked machine left
+    // unattended should not hand out privileged actions to whoever walks up,
+    // and this matches sudo, which also still asks because the image sets
+    // timestamp_timeout=0.
+    return polkit.Result.AUTH_SELF;
+});

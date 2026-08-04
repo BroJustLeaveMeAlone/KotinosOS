@@ -1,0 +1,40 @@
+; KotinosOS admin-mode grant: its own SELinux type, and the one domain allowed
+; to read it besides root.
+;
+; WHY THIS EXISTS
+;
+; The grant at /run/kotinos/admin-grant is what says admin mode is open. Both
+; paths to root consult it: sudo through a PAM helper, and polkit through a rule
+; that spawns the same checker. The PAM helper runs as root and can read it.
+; polkitd cannot -- it runs as the unprivileged `polkitd` user in the
+; policykit_t domain, and the grant sat in /run as var_run_t, which policykit_t
+; has no read access to.
+;
+; That denial was invisible. A dontaudit rule suppressed it, so the polkit rule
+; simply failed with nothing in the journal and nothing in `ausearch`; it only
+; appeared after `semodule -DB`. Worth remembering the next time a policy
+; problem presents as "the code does not work for no reason".
+;
+; WHY A DEDICATED TYPE RATHER THAN OPENING UP var_run_t
+;
+; Allowing policykit_t to read var_run_t would grant it every runtime state file
+; on the system to fix one. A type of our own is the smallest change that makes
+; the grant readable exactly where it must be: policykit_t may read it, nothing
+; else gains anything, and the file is still unwritable by everything except
+; root.
+;
+; The security property that matters here is INTEGRITY, not secrecy. Knowing
+; that admin mode is open tells an attacker nothing they could not learn by
+; trying sudo; being able to *write* this file would hand them root. So read
+; access is granted narrowly and write access is granted to nobody new.
+
+(type kotinos_admin_grant_t)
+(typeattributeset file_type (kotinos_admin_grant_t))
+(roletype object_r kotinos_admin_grant_t)
+
+; polkit's rule engine spawns the grant checker, which reads this file.
+(allow policykit_t kotinos_admin_grant_t (file (read open getattr)))
+
+; It lives on the tmpfs mounted at /run, so the directory it sits in has to be
+; traversable by the same domain.
+(allow policykit_t var_run_t (dir (search getattr)))
