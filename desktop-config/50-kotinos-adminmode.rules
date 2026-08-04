@@ -47,11 +47,31 @@ polkit.addRule(function(action, subject) {
         return polkit.Result.NOT_HANDLED;
     }
 
+    // Decisions are logged through `logger` rather than polkit.log().
+    //
+    // polkit.log() writes at debug level and polkitd runs with
+    // --log-level=notice, so those messages go nowhere -- verified by looking
+    // for them and finding an empty journal. Raising the daemon's log level
+    // would turn on every internal debug message to get these few, so the rule
+    // writes its own line instead.
+    //
+    // Logged at all because polkit records nothing about these by default, and
+    // the desktop would otherwise be the one route to privilege that leaves no
+    // trace: `kotinos-admin log` can read back what sudo did during a session
+    // but would show nothing of what was done through the GUI.
+    function note(msg) {
+        try { polkit.spawn(["/usr/bin/logger", "-t", "kotinos-polkit", msg]); }
+        catch (e) { /* logging must never be what refuses an action */ }
+    }
+
     try {
         polkit.spawn(["/usr/libexec/kotinos-admin", "check", subject.user]);
     } catch (e) {
+        note("refused " + action.id + " for " + subject.user + " (admin mode closed)");
         return polkit.Result.NO;
     }
+
+    note("allowed " + action.id + " for " + subject.user + " (admin mode open)");
 
     // Admin mode is open. Still ask for the password: an unlocked machine left
     // unattended should not hand out privileged actions to whoever walks up,

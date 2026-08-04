@@ -88,7 +88,7 @@ sudo ./build.sh v1 vhd
 | M3 | Desktop & UX | Restricted settings app, first-boot, appliance shell |
 | M3.5 | Identity & comfort | Boot splash, motion language, theming, friction removal |
 | M4 | Sandboxing | Flatpak-only apps, hardened defaults |
-| M5 | Admin mode | Offline 2FA, policy-layer enforcement |
+| M5 | Admin mode | Offline 2FA, policy-layer enforcement ✅ |
 | M6 | AI assistant | Constrained command execution + semantic file search |
 | M7 | Distribution | Installer, signing, update channels |
 | M8 | Hardware QA | Supported-hardware matrix, v1.0 |
@@ -104,6 +104,7 @@ sudo ./build.sh v1 vhd
 - A KDE Plasma desktop boots to a graphical login
 - A hostile script run as the ordinary user is stopped at **22 of 22** probed boundaries: it cannot delete or even list the snapshots, mount the vault partition or read its raw block device, rewrite the vault's configuration, read another account's files, stop the safety services, write to `/usr`, or reach root without a password. It *can* encrypt and delete the user's own documents, which is correct — the claim is not that ransomware cannot run, but that the damage stays recoverable
 - A Flatpak without filesystem permission cannot read `~/.ssh` or `Documents`, and can once granted — the same command, the only difference being the permission
+- **A correct password alone does not get you root.** Admin mode needs the password *and* a second factor *and* a deliberate unlock, on both routes — the terminal and the desktop's authorisation prompts. A safety snapshot is taken before the door opens, the window shuts by itself, and afterwards `kotinos-admin log` shows every command and every desktop action that ran inside it
 
 That list is the result of an adversarial test, not an audit of intentions, and
 its first run failed. It found eight defects, two of which let an unprivileged

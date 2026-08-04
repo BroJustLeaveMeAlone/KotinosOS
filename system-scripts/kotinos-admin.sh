@@ -38,6 +38,12 @@ LOG_TAG="kotinos-admin"
 GRANT_DIR=/run/kotinos
 GRANT_FILE="${GRANT_DIR}/admin-grant"
 
+# A record of when admin mode was open, kept in /var so it outlives the grant
+# and the reboot. The grant itself is deliberately on tmpfs and is gone the
+# moment the window closes, which is right for authorisation and useless for
+# answering "what happened last Tuesday".
+SESSION_LOG="${STATE_DIR}/admin-sessions"
+
 # How long an unlock lasts. Long enough to finish a real administrative task,
 # short enough that walking away from the machine is not the same as leaving it
 # rooted. Expiry is checked on every attempt rather than scheduled, so there is
@@ -61,6 +67,7 @@ Usage: kotinos-admin <command>
   lock              close admin mode now, without waiting for it to expire
   check [user]      exit 0 if admin mode is open for that user; silent
   status [user]     enrolment, recovery codes remaining, and time left
+  log               what was done during the last admin session
 
 Admin mode ends by itself. `check` is what sudo and polkit consult, so it is
 quiet and fast, and refuses whenever it cannot prove the grant is good.
@@ -386,16 +393,109 @@ do_unlock() {
     fi
 
     local expiry; expiry="$(write_grant "${user}")"
+    install -d -m 0755 "${STATE_DIR}"
+    printf 'start=%s expiry=%s user=%s\n' "$(date +%s)" "${expiry}" "${user}" \
+        >> "${SESSION_LOG}"
+    chmod 0600 "${SESSION_LOG}" 2>/dev/null
     logger -t kotinos-admin "admin mode granted to ${user} until $(date -d "@${expiry}" '+%H:%M:%S')" 2>/dev/null
     echo "Admin mode is open for ${user} until $(date -d "@${expiry}" '+%H:%M')."
     echo "It ends by itself. To end it now: kotinos-admin lock"
+    echo "Afterwards, to see what was done in it: kotinos-admin log"
 }
 
 do_lock() {
     need_root
     rm -f "${GRANT_FILE}"
+    [[ -f "${SESSION_LOG}" ]] && printf 'ended=%s\n' "$(date +%s)" >> "${SESSION_LOG}"
     logger -t kotinos-admin "admin mode closed" 2>/dev/null
     echo "Admin mode is closed."
+}
+
+# --- reviewing a session ------------------------------------------------------
+#
+# The safety capture exists so an admin session can be undone. Undoing one is a
+# great deal easier when you can see what it did, so this reads back the window
+# the grant was open for.
+#
+# It does not invent a new log. sudo already records every command it runs, with
+# the user, the working directory and the full command line; the polkit rule
+# logs the authorisations it allows; and unlock and lock are logged here. What
+# was missing was a way to ask "what happened between those two moments", which
+# is the question someone actually has when something has gone wrong.
+#
+# Deliberately NOT auditd. The commands are already recorded and the journal is
+# persistent, so what auditd would add is syscall-level detail nobody has yet
+# needed — at the cost of a daemon, disk, and a second stream of noise to keep
+# configured. Revisit when there is a question the journal genuinely cannot
+# answer, rather than installing it because a security document expects it.
+do_log() {
+    need_root
+    [[ -r "${SESSION_LOG}" ]] || { echo "No admin sessions recorded yet."; return 0; }
+
+    local line start expiry user ended
+    line="$(grep '^start=' "${SESSION_LOG}" | tail -1)"
+    [[ -n "${line}" ]] || { echo "No admin sessions recorded yet."; return 0; }
+
+    start="$(sed -n 's/.*start=\([0-9]*\).*/\1/p' <<< "${line}")"
+    expiry="$(sed -n 's/.*expiry=\([0-9]*\).*/\1/p' <<< "${line}")"
+    user="$(sed -n 's/.*user=\([^ ]*\).*/\1/p' <<< "${line}")"
+
+    # Where the window ended: an explicit lock if there was one, otherwise the
+    # expiry, otherwise now if it is still open.
+    ended="$(grep '^ended=' "${SESSION_LOG}" | tail -1 | sed -n 's/ended=//p')"
+    local finish="${expiry}"
+    if [[ -n "${ended}" ]] && (( ended > start )) && (( ended < expiry )); then
+        finish="${ended}"
+    fi
+    local now; now="$(date +%s)"
+    (( finish > now )) && finish="${now}"
+
+    echo "Last admin session"
+    echo "  Opened by   ${user}"
+    echo "  From        $(date -d "@${start}" '+%-d %B %Y, %H:%M:%S')"
+    echo "  Until       $(date -d "@${finish}" '+%H:%M:%S')$( grant_valid "${user}" && printf ' (still open)' )"
+    echo
+    echo "  What ran with elevated privilege:"
+
+    # The window is applied numerically, on epoch timestamps from
+    # `-o short-unix`, rather than with journalctl's --since/--until.
+    #
+    # Both documented forms were tried and neither selected the right entries
+    # here: `--since @<epoch>` returned one line for a window the unbounded
+    # query showed thousands in, and so did the `YYYY-MM-DD HH:MM:SS` form
+    # across a range whose entries were plainly visible. Rather than keep
+    # guessing at the parser, this reads the timestamps as numbers and compares
+    # them as numbers, which cannot be ambiguous.
+    local found=0
+    while IFS= read -r entry; do
+        [[ -z "${entry}" ]] && continue
+        found=1
+        printf '    %s\n' "${entry}"
+    done < <(journalctl -b -o short-unix --no-pager 2>/dev/null \
+             | awk -v s="${start}" -v f="${finish}" '{ t = $1 + 0; if (t >= s && t <= f) print }' \
+             | grep -oP 'sudo\[\d+\]:\s+\K\S+\s*:.*COMMAND=.*' \
+             | sed 's/ ; USER=root ; COMMAND=/  ->  /; s/ ; PWD=/  in /' )
+
+    (( found == 0 )) && echo "    (nothing ran through sudo in that window)"
+
+    # The desktop path, which polkit records only because our rule writes the
+    # line itself -- polkit logs none of this by default.
+    echo
+    echo "  What was authorised through the desktop:"
+    local pfound=0
+    while IFS= read -r entry; do
+        [[ -z "${entry}" ]] && continue
+        pfound=1
+        printf '    %s\n' "${entry}"
+    done < <(journalctl -b -o short-unix --no-pager 2>/dev/null \
+             | awk -v s="${start}" -v f="${finish}" '{ t = $1 + 0; if (t >= s && t <= f) print }' \
+             | grep -oP 'kotinos-polkit\[\d+\]:\s+\K.*' )
+    (( pfound == 0 )) && echo "    (nothing went through polkit in that window)"
+
+    echo
+    echo "  To undo the whole session, the snapshot taken before it opened:"
+    snapper -c var list 2>/dev/null | grep 'pre-escalation' | tail -1 | sed 's/^/    /' \
+        || echo "    (none found)"
 }
 
 do_status() {
@@ -428,6 +528,7 @@ case "${1:-}" in
     lock)    shift; do_lock ;;
     check)   shift; do_check "${1:-}" ;;
     status)  shift; do_status "${1:-}" ;;
+    log)     shift; do_log ;;
     -h|--help|"") usage ;;
     *)       log "unrecognised: $1"; usage; exit 2 ;;
 esac

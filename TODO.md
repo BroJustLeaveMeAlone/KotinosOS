@@ -24,7 +24,7 @@ Legend: `[x]` done · `[ ]` open · `[~]` in progress
 | M3 | Desktop & appliance UX — shell, settings, first-run, hardware | ✅ **Core complete** (22 Jul 2026) — wizard outstanding |
 | M3.5 | Identity & comfort — look, motion, personalization, friction removal | 🚧 **In progress** — splash, windows, comfort features done |
 | M4 | Sandboxing & hardening | ✅ **Complete** (27 Jul 2026) — all four exit criteria met on a clean image; 22/22 adversarial boundaries hold. Eight defects found and fixed, two of which let an unprivileged user attack the safety net |
-| M5 | Admin mode & offline 2FA | 🚧 **Core complete** (4 Aug 2026) — both paths to root gated behind password + TOTP + a deliberate unlock, verified on a clean image; a correct password alone gets nothing. UI and the during-session audit trail outstanding |
+| M5 | Admin mode & offline 2FA | ✅ **Complete** (4 Aug 2026) — both paths to root gated behind password + TOTP + a deliberate unlock, verified on a clean image; a correct password alone gets nothing, and every session is reviewable afterwards |
 | M6 | AI assistant (+ M6b semantic file layer) | ⬜ Not started |
 | M7 | Distribution infrastructure | ⬜ Not started |
 | M8 | Hardware QA & v1.0 | ⬜ Not started |
@@ -733,7 +733,7 @@ subject to, not just the user.
 
 ---
 
-## Milestone 5 — Admin mode & offline 2FA 🚧 IN PROGRESS (pillar 4)
+## Milestone 5 — Admin mode & offline 2FA ✅ COMPLETE (pillar 4)
 
 **In plain words:** the everyday account cannot break the machine, and when the
 user genuinely needs full control they unlock it on purpose — with something
@@ -1082,13 +1082,23 @@ same flow rather than being bolted on afterwards.
   attempt rather than scheduled, so expiry needs nothing pushed out to processes
   already running. `kotinos-admin status` shows the time left. Verified by
   winding a grant's expiry into the past and watching the next `sudo` refuse
-- [~] **Record what admin mode did** — unlock and lock are logged to the journal
-  via `logger`, which is enough to answer *when* admin mode was open and for
-  whom. What happened *during* it is not recorded, and that is the part the
-  `auditd` decision was deferred to. Still open
-- [ ] **The restricted surface stays restricted** — M3 already limits the settings
-  app via Plasma's Kiosk framework. Verify that the full control panel is
-  genuinely unreachable while locked, rather than merely unlisted
+- [x] **Record what admin mode did** — `kotinos-admin log` reads back the last
+  session: who opened it, the window, every command that ran through `sudo`,
+  every action authorised through the desktop, and the pre-escalation snapshot
+  that undoes the lot. It invents no new log — `sudo` already records each
+  command with user, working directory and full command line, and the session
+  file in `/var` (`0600 root:root`) exists only to remember *when* the window was
+  open, since the grant itself lives on tmpfs and is gone the moment it closes.
+  **This settles the `auditd` question**: the commands are already recorded and
+  the journal is persistent, so `auditd` would add syscall-level detail nobody
+  has yet needed, at the cost of a daemon and a second stream to keep configured.
+  Revisit when there is a question the journal genuinely cannot answer
+- [x] **The restricted surface stays restricted** — verified rather than assumed.
+  The block is `[KDE Action Restrictions][$i]`, and the `[$i]` marker is what
+  makes it immutable rather than merely default. Tested by having the ordinary
+  user try to override it: `kwriteconfig6` does not even write the key, and the
+  effective value the desktop reads stays `false` for both `shell_access` and
+  `run_command`. The file itself is not writable by them either
 - [x] **The adversarial test grows a second half** — `tests/adversarial-admin.sh`,
   run on `m5b`: **12 allowed, 2 blocked.** Mostly a list of things that succeed,
   because admin mode grants root and that is what it is for. The two that resist
@@ -1208,6 +1218,31 @@ checks on `m5b`, 0 failures:
 - a recovery code works as the second factor
 - no failed units, SSH domains still enforcing, setuid still 16, no
   world-writable files, `users.oath` still `shadow_t`
+
+#### The desktop was the one path to privilege that left no trace
+
+polkit logs nothing about the actions it authorises. So `kotinos-admin log` could
+read back everything done through `sudo` during a session and show none of what
+was done through the GUI — the half of the gate that M5 added specifically so the
+desktop could not be the way around it would have been the half with no record.
+
+The rule now writes its own line. Not with `polkit.log()`, which was the obvious
+choice and produces nothing: it writes at debug level while polkitd runs with
+`--log-level=notice`, so those messages go nowhere. Confirmed by looking for them
+and finding an empty journal. Raising the daemon's level would turn on every
+internal debug message to obtain these few, so the rule spawns `logger` instead:
+
+```
+kotinos-polkit[6376]: refused org.freedesktop.systemd1.manage-units for kotinos (admin mode closed)
+kotinos-polkit[5749]: allowed org.freedesktop.systemd1.manage-units for kotinos (admin mode open)
+```
+
+Reading a session's window back out of the journal also took three attempts.
+`journalctl --since @<epoch>` returned one line for a window the unbounded query
+showed thousands in; the documented `YYYY-MM-DD HH:MM:SS` form did the same. The
+working version reads `-o short-unix` and compares epoch seconds numerically in
+`awk`, which cannot be ambiguous. Recorded because the two forms that failed are
+the two any reasonable person would reach for first.
 
 #### An unrelated find: every build was rebuilding everything
 
